@@ -101,6 +101,10 @@
     <div class="card" id="c-fotos"><div class="rotulo">Fotos pendentes</div><div class="valor">—</div><div class="extra">só pelo Wi-Fi</div></div>
     <div class="card" id="c-telemetria"><div class="rotulo">Telemetria pendente</div><div class="valor">—</div><div class="extra"></div></div>
     <div class="card" id="c-sd"><div class="rotulo">Cartão SD</div><div class="valor">—</div><div class="extra"></div></div>
+    <div class="card" id="c-link"><div class="rotulo">Conexão</div><div class="valor">—</div><div class="extra"></div></div>
+    <div class="card" id="c-contato"><div class="rotulo">Última comunicação</div><div class="valor">—</div><div class="extra"></div></div>
+    <div class="card" id="c-temp"><div class="rotulo">Temperatura da Pi</div><div class="valor">—</div><div class="extra"></div></div>
+    <div class="card" id="c-4g"><div class="rotulo">Dados no 4G</div><div class="valor">—</div><div class="extra"></div></div>
   </div>
 
   <div class="grade">
@@ -145,9 +149,17 @@ const $ = s => document.querySelector(s);
 const api = p => fetch('/api' + p).then(r => { if (!r.ok) throw new Error(p + ': HTTP ' + r.status); return r.json(); });
 const hora = ts => new Date(ts * 1000).toLocaleTimeString('pt-BR');
 const dataHora = ts => new Date(ts * 1000).toLocaleString('pt-BR');
+// Número com vírgula decimal: num(52.3, 1) → "52,3".
+const num = (v, casas) => v.toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas });
 const TIPO = { fadiga: 'Fadiga', distracao: 'Distração' };
 const SINC = [['pendente', 'pend'], ['enviado', 'ok'], ['recusado', 'rec']];
 const COR = { fadiga: '#E76F51', distracao: '#F4A261' };
+const LINK = { wifi: 'Wi-Fi', cellular: '4G' };
+// O Sync fala com o servidor a cada 60 s quando há enlace; 5 min sem
+// notícias = dispositivo fora do ar ou sem cobertura.
+const OFFLINE_S = 300;
+// A Raspberry Pi 4 começa a reduzir o clock a 80 °C.
+const TEMP_ALERTA = 70, TEMP_CRITICA = 80;
 const NOMES = { gps: 'GPS', imu: 'IMU', obd: 'OBD-II', lat: 'latitude', lon: 'longitude', speed: 'velocidade',
                 rpm: 'rotação', coolant: 'arrefecimento', ax: 'acel. X', ay: 'acel. Y', az: 'acel. Z' };
 
@@ -188,8 +200,37 @@ function renderSaude(h) {
   card('c-telemetria', h.pending.telemetry,
        h.last_telemetry ? 'última ' + relativo(h.last_telemetry) : 'sem leituras ainda');
   const usado = h.storage.used;
-  card('c-sd', Math.round(usado * 100) + '%', (h.storage.free_bytes / 1e9).toFixed(1) + ' GB livres',
+  card('c-sd', Math.round(usado * 100) + '%', num(h.storage.free_bytes / 1e9, 1) + ' GB livres',
        usado >= .95 ? 'critico' : usado >= .8 ? 'alerta' : '');
+
+  // Campos do POST /health que o Sync envia: só existem com o backend.
+  // Campo ausente = ainda sem backend; null = o dispositivo não tem o dado.
+  if (!('link' in h)) {
+    for (const id of ['c-link', 'c-contato', 'c-temp', 'c-4g']) card(id, '—', 'chega com o backend');
+    return;
+  }
+
+  const offline = !h.last_contact || Date.now() / 1000 - h.last_contact > OFFLINE_S;
+  if (offline) card('c-link', 'Sem conexão', h.link ? 'último enlace: ' + LINK[h.link] : '', 'alerta');
+  else card('c-link', LINK[h.link] || 'Sem conexão',
+            h.link === 'cellular' ? 'fotos aguardam o Wi-Fi' : 'envia tudo, inclusive as fotos');
+
+  card('c-contato', h.last_contact ? relativo(h.last_contact) : 'nunca',
+       h.last_contact ? dataHora(h.last_contact) : 'o dispositivo ainda não falou com o servidor');
+
+  const t = h.temperature;
+  if (t == null) card('c-temp', '—', 'sensor indisponível');
+  else card('c-temp', num(t, 1) + ' °C', t >= TEMP_CRITICA ? 'reduzindo o desempenho' : 'processador da Raspberry Pi',
+            t >= TEMP_CRITICA ? 'critico' : t >= TEMP_ALERTA ? 'alerta' : '');
+
+  card('c-4g', bytes(h.cellular_bytes), 'desde que a Pi ligou');
+}
+
+function bytes(n) {
+  if (n == null) return '—';
+  if (n < 1e6) return num(n / 1e3, 0) + ' kB';
+  if (n < 1e9) return num(n / 1e6, 1) + ' MB';
+  return num(n / 1e9, 2) + ' GB';
 }
 
 // ---------- eventos ----------
@@ -201,10 +242,10 @@ function renderEventos(lista) {
     const tr = el('tr', { 'data-id': e.id },
       el('td', {}, dataHora(e.ts)),
       el('td', {}, el('span', { class: 'tipo ' + e.type }, TIPO[e.type] || e.type)),
-      el('td', {}, e.score == null ? '—' : e.score.toFixed(2)),
+      el('td', {}, e.score == null ? '—' : num(e.score, 2)),
       el('td', {}, sinc(e)));
     if (e.id === selecionado) tr.classList.add('sel');
-    tr.onclick = () => selecionar(e.id);
+    tr.onclick = () => selecionar(e.id, true);
     return tr;
   }));
   $('#sem-eventos').hidden = lista.length > 0;
@@ -212,11 +253,16 @@ function renderEventos(lista) {
 
 let graficoJanela = null;
 
-async function selecionar(id) {
+// centralizar: leva o mapa até o evento. Não na seleção automática da
+// carga da página, para não perder a visão da viagem inteira.
+async function selecionar(id, centralizar = false) {
   selecionado = id;
   document.querySelectorAll('#eventos tr').forEach(tr => tr.classList.toggle('sel', tr.dataset.id === id));
+  desenharMarcas();
+  marcarEventos();
   const e = await api('/events/' + id);
   if (selecionado !== id) return;
+  if (centralizar && e.data.gps) mapa.flyTo([e.data.gps.lat, e.data.gps.lon], Math.max(mapa.getZoom(), 16), { duration: .6 });
 
   const foto = e.has_photo
     ? el('img', { class: 'foto', src: `/api/events/${id}/photo`, alt: 'Foto do motorista no momento do evento' })
@@ -225,7 +271,7 @@ async function selecionar(id) {
   const info = el('dl', {},
     el('dt', {}, 'Tipo'), el('dd', {}, TIPO[e.type] || e.type),
     el('dt', {}, 'Horário'), el('dd', {}, dataHora(e.ts)),
-    el('dt', {}, 'Score'), el('dd', {}, e.score == null ? '—' : e.score.toFixed(2)),
+    el('dt', {}, 'Score'), el('dd', {}, e.score == null ? '—' : num(e.score, 2)),
     el('dt', {}, 'Envio'), el('dd', {}, sinc(e)),
     el('dt', {}, 'ID'), el('dd', {}, e.id));
 
@@ -236,7 +282,7 @@ async function selecionar(id) {
     const dl = el('dl');
     for (const [k, v] of Object.entries(valores)) {
       if (k === 'ts' || typeof v === 'object') continue;
-      dl.append(el('dt', {}, NOMES[k] || k), el('dd', {}, typeof v === 'number' ? +v.toFixed(5) + '' : String(v)));
+      dl.append(el('dt', {}, NOMES[k] || k), el('dd', {}, typeof v === 'number' ? v.toLocaleString('pt-BR', { maximumFractionDigits: 5 }) : String(v)));
     }
     sensores.append(el('h3', {}, NOMES[fonte] || fonte), dl);
   }
@@ -259,8 +305,43 @@ async function selecionar(id) {
       { label: 'Aceleração X (g)', data: imu.map(w => ({ x: w.ts - e.ts, y: w.data.ax })), borderColor: '#F4A261', yAxisID: 'g' },
     ] },
     options: opcoes({ x: { type: 'linear', title: { display: true, text: 's em relação ao evento' } },
-                      y: { position: 'left' }, g: { position: 'right', grid: { drawOnChartArea: false } } }),
+                      y: { position: 'left' }, g: { position: 'right', grid: { drawOnChartArea: false } } },
+                    { linhas: [{ x: 0, cor: COR[e.type], rotulo: TIPO[e.type] }] }),
   });
+}
+
+// Linhas verticais nos instantes dos eventos (Chart.js não tem isso sem plugin).
+Chart.register({
+  id: 'marcador',
+  afterDatasetsDraw(chart, args, opts) {
+    const { ctx, chartArea: area, scales: { x } } = chart;
+    for (const { x: valor, cor, rotulo, fraca } of opts.linhas || []) {
+      if (valor < x.min || valor > x.max) continue;
+      const px = x.getPixelForValue(valor);
+      ctx.save();
+      ctx.strokeStyle = ctx.fillStyle = cor;
+      ctx.globalAlpha = fraca ? .35 : 1;
+      ctx.lineWidth = fraca ? 1 : 2;
+      ctx.setLineDash(fraca ? [] : [5, 3]);
+      ctx.beginPath(); ctx.moveTo(px, area.top); ctx.lineTo(px, area.bottom); ctx.stroke();
+      if (rotulo) {
+        const direita = px > area.right - 90;
+        ctx.font = '600 11px ' + Chart.defaults.font.family;
+        ctx.textAlign = direita ? 'right' : 'left';
+        ctx.fillText(rotulo, px + (direita ? -5 : 5), area.top + 12);
+      }
+      ctx.restore();
+    }
+  },
+});
+
+let ultimaLista = [];
+
+function marcarEventos() {
+  graficoTel.options.plugins.marcador.linhas = ultimaLista.map(e => e.id === selecionado
+    ? { x: e.ts, cor: COR[e.type], rotulo: TIPO[e.type] + ' ' + hora(e.ts) }
+    : { x: e.ts, cor: COR[e.type], fraca: true });
+  graficoTel.update('none');
 }
 
 // ---------- mapa e telemetria ----------
@@ -283,20 +364,27 @@ function renderMapa(tel, lista) {
     posicao.setLatLng(pontos.at(-1)).bindTooltip('Última posição').addTo(mapa);
     if (!enquadrado) { mapa.fitBounds(trilha.getBounds(), { padding: [20, 20] }); enquadrado = true; }
   }
+  desenharMarcas();
+}
+
+function desenharMarcas() {
   marcas.clearLayers();
-  for (const e of lista) {
+  for (const e of ultimaLista) {
     if (!e.data.gps) continue;
-    L.circleMarker([e.data.gps.lat, e.data.gps.lon], { radius: 7, color: '#fff', weight: 2, fillColor: COR[e.type], fillOpacity: 1 })
-      .bindTooltip(`${TIPO[e.type]} · ${hora(e.ts)}`).on('click', () => selecionar(e.id)).addTo(marcas);
+    const sel = e.id === selecionado;
+    const m = L.circleMarker([e.data.gps.lat, e.data.gps.lon], {
+      radius: sel ? 11 : 7, color: sel ? '#264653' : '#fff', weight: sel ? 3 : 2, fillColor: COR[e.type], fillOpacity: 1,
+    }).bindTooltip(`${TIPO[e.type]} · ${hora(e.ts)}`).on('click', () => selecionar(e.id)).addTo(marcas);
+    if (sel) m.bringToFront();
   }
 }
 
-function opcoes(escalas) {
+function opcoes(escalas, marcador = {}) {
   return {
     responsive: true, maintainAspectRatio: false, animation: false,
     elements: { point: { radius: 0, hitRadius: 6 }, line: { borderWidth: 2 } },
     interaction: { mode: 'nearest', axis: 'x', intersect: false },
-    plugins: { legend: { labels: { boxWidth: 12 } } },
+    plugins: { legend: { labels: { boxWidth: 12 } }, marcador },
     scales: escalas,
   };
 }
@@ -320,7 +408,7 @@ function renderTelemetria(tel) {
   const serie = (fonte, campo) => tel.filter(r => r.data[fonte]?.[campo] != null).map(r => ({ x: r.ts, y: r.data[fonte][campo] }));
   const [a, b, c] = graficoTel.data.datasets;
   a.data = serie('obd', 'speed'); b.data = serie('gps', 'speed'); c.data = serie('obd', 'rpm');
-  graficoTel.update();
+  marcarEventos();
   $('#tel-vazio').classList.toggle('on', !a.data.length && !b.data.length && !c.data.length);
 }
 
@@ -328,6 +416,7 @@ function renderTelemetria(tel) {
 async function atualizar() {
   try {
     const [saude, lista, tel] = await Promise.all([api('/health'), api('/events?limit=200'), api('/telemetry')]);
+    ultimaLista = lista;
     renderSaude(saude);
     renderEventos(lista);
     renderMapa(tel, lista);

@@ -76,7 +76,8 @@ Imprime `OK` no fim. Precisa do `integracao/` ao lado, como o `demo_data.py`.
 
 | Bloco               | Fonte                    | Hoje                                         |
 |---------------------|--------------------------|----------------------------------------------|
-| Saúde (cartões)     | `GET /api/health`        | ✅ pendências e ocupação do cartão            |
+| Saúde (cartões)     | `GET /api/health`        | ✅ pendências e ocupação do cartão; ⏳ conexão, temperatura, 4G e última comunicação chegam com o backend |
+| Evento ↔ gráfico ↔ mapa | seleção na tabela ou no mapa | ✅ linha no instante do evento e mapa centralizado nele |
 | Lista de eventos    | `GET /api/events`        | ✅ eventos reais da câmera                    |
 | Detalhe e foto      | `GET /api/events/<id>`   | ✅ foto real; sensores vazios sem o ESP32     |
 | Janela de ±10 s     | `window` do evento       | ⏳ vazia até o ESP32 enviar IMU e OBD-II      |
@@ -99,8 +100,30 @@ Todas devolvem JSON, exceto a foto. `ts` é sempre em segundos desde 1970 (Unix)
 }
 ```
 
-No backend, isto vem do último `POST /health` que o `Sync` envia
-(ele também traz `link`, `temperature`, `cellular_bytes` e `last_contact`).
+No backend, isto vem do último `POST /health` que o `Sync` envia, e
+deve trazer também os campos abaixo (RF32). O `dev_server.py` não os envia:
+sem eles, os cartões mostram "chega com o backend".
+
+```json
+{
+  "link": "wifi",
+  "last_contact": 1792787900.1,
+  "temperature": 52.3,
+  "cellular_bytes": 18400000
+}
+```
+
+| Campo            | Significado                                                          | `null` quer dizer          |
+|------------------|----------------------------------------------------------------------|----------------------------|
+| `link`           | Enlace do último contato: `"wifi"` ou `"cellular"`                    | sem enlace                 |
+| `last_contact`   | Quando o **servidor** recebeu o último `POST /health` do dispositivo | nunca se comunicou         |
+| `temperature`    | Temperatura da Raspberry Pi, em °C                                   | sensor indisponível        |
+| `cellular_bytes` | Bytes trafegados no 4G desde que a Pi ligou (zera ao reiniciar)      | —                          |
+
+Mais de 5 min sem `POST /health` aparece como "Sem conexão" (o `Sync`
+fala com o servidor a cada 60 s quando há enlace). Temperatura a partir
+de 70 °C fica em alerta e a partir de 80 °C em crítico, que é quando a
+Pi 4 começa a reduzir o clock.
 
 ### `GET /api/events?limit=200`
 
