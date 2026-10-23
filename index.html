@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>V-GUARD Dashboard</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --azul: #264653; --verde: #2A9D8F; --verde-claro: #9FD4CD;
+    --amarelo: #E9C46A; --laranja: #F4A261; --vermelho: #E76F51;
+    --texto: #1F1F1F; --texto-2: #4D4D4D; --fundo: #F4F6F6; --cartao: #FFFFFF;
+    --borda: #DDE3E4;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--fundo); color: var(--texto);
+    font: 14px Inter, system-ui, sans-serif;
+  }
+  header {
+    background: var(--azul); color: #fff; padding: 14px 24px;
+    display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap;
+  }
+  header h1 { margin: 0; font-size: 20px; letter-spacing: .5px; }
+  header .sub { opacity: .8; }
+  header .status { margin-left: auto; font-size: 13px; opacity: .85; }
+  header .status.erro { color: var(--laranja); opacity: 1; }
+  main { padding: 20px 24px; display: grid; gap: 16px; max-width: 1400px; margin: 0 auto; }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+  .card {
+    background: var(--cartao); border: 1px solid var(--borda); border-radius: 8px;
+    padding: 12px 14px; border-top: 4px solid var(--verde);
+  }
+  .card .rotulo { color: var(--texto-2); font-size: 12px; text-transform: uppercase; letter-spacing: .4px; }
+  .card .valor { font-size: 24px; font-weight: 600; margin-top: 4px; }
+  .card .extra { color: var(--texto-2); font-size: 12px; margin-top: 2px; }
+  .card.alerta { border-top-color: var(--laranja); }
+  .card.critico { border-top-color: var(--vermelho); }
+
+  .grade { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+  @media (max-width: 900px) { .grade { grid-template-columns: 1fr; } main { padding: 16px; } }
+
+  section {
+    background: var(--cartao); border: 1px solid var(--borda); border-radius: 8px;
+    padding: 14px 16px; min-width: 0;
+  }
+  section h2 { margin: 0 0 12px; font-size: 15px; color: var(--azul); }
+
+  .tabela { max-height: 430px; overflow: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-weight: 600; color: var(--texto-2); font-size: 12px;
+       padding: 6px 8px; border-bottom: 2px solid var(--borda); position: sticky; top: 0; background: var(--cartao); }
+  td { padding: 8px; border-bottom: 1px solid var(--borda); }
+  tbody tr { cursor: pointer; }
+  tbody tr:hover { background: #F0F7F6; }
+  tbody tr.sel { background: #E2F2EF; box-shadow: inset 3px 0 var(--verde); }
+
+  .tipo { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 12px; font-weight: 600; }
+  .tipo.fadiga { background: #FBE2DB; color: #9C3A22; }
+  .tipo.distracao { background: #FDEBDC; color: #8A4B14; }
+  .sinc { font-size: 12px; color: var(--texto-2); }
+  .sinc b { font-weight: 600; }
+  .sinc .ok { color: var(--verde); } .sinc .pend { color: #B07A12; } .sinc .rec { color: var(--vermelho); }
+
+  .detalhe { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+  @media (max-width: 600px) { .detalhe { grid-template-columns: 1fr; } }
+  .foto { width: 100%; aspect-ratio: 4 / 3; background: #EEF1F1; border-radius: 6px; object-fit: cover;
+          display: flex; align-items: center; justify-content: center; color: var(--texto-2); text-align: center; }
+  dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 13px; }
+  dt { color: var(--texto-2); } dd { margin: 0; word-break: break-all; }
+  h3 { font-size: 13px; color: var(--azul); margin: 14px 0 6px; }
+
+  .grafico { position: relative; height: 260px; }
+  .grafico.pequeno { height: 170px; }
+  #mapa { height: 360px; border-radius: 6px; }
+  .vazio-wrap { position: relative; }
+  .vazio {
+    position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
+    text-align: center; padding: 20px; color: var(--texto-2); background: rgba(255,255,255,.88);
+    border-radius: 6px; z-index: 500;
+  }
+  .vazio.on { display: flex; }
+  .nada { color: var(--texto-2); padding: 20px 0; text-align: center; }
+</style>
+</head>
+<body>
+<header>
+  <h1>V-GUARD</h1>
+  <span class="sub">Painel do dispositivo</span>
+  <span class="status" id="status">carregando…</span>
+</header>
+
+<main>
+  <div class="cards">
+    <div class="card" id="c-evento"><div class="rotulo">Último evento</div><div class="valor">—</div><div class="extra"></div></div>
+    <div class="card" id="c-eventos"><div class="rotulo">Eventos pendentes</div><div class="valor">—</div><div class="extra">metadados a enviar</div></div>
+    <div class="card" id="c-fotos"><div class="rotulo">Fotos pendentes</div><div class="valor">—</div><div class="extra">só pelo Wi-Fi</div></div>
+    <div class="card" id="c-telemetria"><div class="rotulo">Telemetria pendente</div><div class="valor">—</div><div class="extra"></div></div>
+    <div class="card" id="c-sd"><div class="rotulo">Cartão SD</div><div class="valor">—</div><div class="extra"></div></div>
+  </div>
+
+  <div class="grade">
+    <section>
+      <h2>Eventos</h2>
+      <div class="tabela">
+        <table>
+          <thead><tr><th>Horário</th><th>Tipo</th><th>Score</th><th>Sincronização</th></tr></thead>
+          <tbody id="eventos"></tbody>
+        </table>
+        <div class="nada" id="sem-eventos" hidden>Nenhum evento registrado ainda.</div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Detalhe do evento</h2>
+      <div id="detalhe"><div class="nada">Selecione um evento.</div></div>
+    </section>
+  </div>
+
+  <div class="grade">
+    <section>
+      <h2>Trajetória</h2>
+      <div class="vazio-wrap">
+        <div id="mapa"></div>
+        <div class="vazio" id="mapa-vazio">Sem posições de GPS.<br>O leitor do GPS ainda não está ligado ao vguard.py (RF02).</div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Telemetria</h2>
+      <div class="vazio-wrap grafico">
+        <canvas id="tel"></canvas>
+        <div class="vazio" id="tel-vazio">Sem telemetria.<br>Os dados chegam pelo ESP32 (IMU e OBD-II) quando ele estiver conectado.</div>
+      </div>
+    </section>
+  </div>
+</main>
+
+<script>
+const $ = s => document.querySelector(s);
+const api = p => fetch('/api' + p).then(r => { if (!r.ok) throw new Error(p + ': HTTP ' + r.status); return r.json(); });
+const hora = ts => new Date(ts * 1000).toLocaleTimeString('pt-BR');
+const dataHora = ts => new Date(ts * 1000).toLocaleString('pt-BR');
+const TIPO = { fadiga: 'Fadiga', distracao: 'Distração' };
+const SINC = [['pendente', 'pend'], ['enviado', 'ok'], ['recusado', 'rec']];
+const COR = { fadiga: '#E76F51', distracao: '#F4A261' };
+const NOMES = { gps: 'GPS', imu: 'IMU', obd: 'OBD-II', lat: 'latitude', lon: 'longitude', speed: 'velocidade',
+                rpm: 'rotação', coolant: 'arrefecimento', ax: 'acel. X', ay: 'acel. Y', az: 'acel. Z' };
+
+function el(tag, attrs = {}, ...filhos) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) k === 'class' ? e.className = v : e.setAttribute(k, v);
+  for (const f of filhos) e.append(f);
+  return e;
+}
+
+function relativo(ts) {
+  const s = Date.now() / 1000 - ts;
+  if (s < 60) return 'agora';
+  if (s < 3600) return `há ${Math.round(s / 60)} min`;
+  if (s < 86400) return `há ${Math.round(s / 3600)} h`;
+  return `há ${Math.round(s / 86400)} dias`;
+}
+
+function sinc(e) {
+  const [m, mc] = SINC[e.meta_synced], [f, fc] = SINC[e.photo_synced];
+  const span = el('span', { class: 'sinc' }, 'dados ', el('b', { class: mc }, m));
+  if (e.has_photo) span.append(' · foto ', el('b', { class: fc }, f));
+  return span;
+}
+
+// ---------- saúde ----------
+function card(id, valor, extra, nivel = '') {
+  const c = $('#' + id);
+  c.className = 'card ' + nivel;
+  c.querySelector('.valor').textContent = valor;
+  if (extra !== undefined) c.querySelector('.extra').textContent = extra;
+}
+
+function renderSaude(h) {
+  card('c-evento', h.last_event ? relativo(h.last_event) : '—', h.last_event ? dataHora(h.last_event) : 'nenhum ainda');
+  card('c-eventos', h.pending.events, undefined, h.pending.events ? 'alerta' : '');
+  card('c-fotos', h.pending.photos, undefined, h.pending.photos ? 'alerta' : '');
+  card('c-telemetria', h.pending.telemetry,
+       h.last_telemetry ? 'última ' + relativo(h.last_telemetry) : 'sem leituras ainda');
+  const usado = h.storage.used;
+  card('c-sd', Math.round(usado * 100) + '%', (h.storage.free_bytes / 1e9).toFixed(1) + ' GB livres',
+       usado >= .95 ? 'critico' : usado >= .8 ? 'alerta' : '');
+}
+
+// ---------- eventos ----------
+let selecionado = null;
+
+function renderEventos(lista) {
+  const corpo = $('#eventos');
+  corpo.replaceChildren(...lista.map(e => {
+    const tr = el('tr', { 'data-id': e.id },
+      el('td', {}, dataHora(e.ts)),
+      el('td', {}, el('span', { class: 'tipo ' + e.type }, TIPO[e.type] || e.type)),
+      el('td', {}, e.score == null ? '—' : e.score.toFixed(2)),
+      el('td', {}, sinc(e)));
+    if (e.id === selecionado) tr.classList.add('sel');
+    tr.onclick = () => selecionar(e.id);
+    return tr;
+  }));
+  $('#sem-eventos').hidden = lista.length > 0;
+}
+
+let graficoJanela = null;
+
+async function selecionar(id) {
+  selecionado = id;
+  document.querySelectorAll('#eventos tr').forEach(tr => tr.classList.toggle('sel', tr.dataset.id === id));
+  const e = await api('/events/' + id);
+  if (selecionado !== id) return;
+
+  const foto = e.has_photo
+    ? el('img', { class: 'foto', src: `/api/events/${id}/photo`, alt: 'Foto do motorista no momento do evento' })
+    : el('div', { class: 'foto' }, 'Evento sem foto');
+
+  const info = el('dl', {},
+    el('dt', {}, 'Tipo'), el('dd', {}, TIPO[e.type] || e.type),
+    el('dt', {}, 'Horário'), el('dd', {}, dataHora(e.ts)),
+    el('dt', {}, 'Score'), el('dd', {}, e.score == null ? '—' : e.score.toFixed(2)),
+    el('dt', {}, 'Envio'), el('dd', {}, sinc(e)),
+    el('dt', {}, 'ID'), el('dd', {}, e.id));
+
+  const sensores = el('div');
+  const fontes = Object.entries(e.data);
+  if (!fontes.length) sensores.append(el('div', { class: 'sinc' }, 'Nenhum sensor conectado no momento do evento.'));
+  for (const [fonte, valores] of fontes) {
+    const dl = el('dl');
+    for (const [k, v] of Object.entries(valores)) {
+      if (k === 'ts' || typeof v === 'object') continue;
+      dl.append(el('dt', {}, NOMES[k] || k), el('dd', {}, typeof v === 'number' ? +v.toFixed(5) + '' : String(v)));
+    }
+    sensores.append(el('h3', {}, NOMES[fonte] || fonte), dl);
+  }
+
+  const janela = el('div', { class: 'vazio-wrap grafico pequeno' }, el('canvas'),
+    el('div', { class: 'vazio' }, 'Sem telemetria nos 10 s antes e depois do evento.'));
+
+  $('#detalhe').replaceChildren(
+    el('div', { class: 'detalhe' }, foto, el('div', {}, info, sensores)),
+    el('h3', {}, 'Janela do evento (±10 s)'), janela);
+
+  if (graficoJanela) graficoJanela.destroy();
+  const obd = e.window.filter(w => w.source === 'obd' && w.data.speed != null);
+  const imu = e.window.filter(w => w.source === 'imu' && w.data.ax != null);
+  janela.querySelector('.vazio').classList.toggle('on', !obd.length && !imu.length);
+  graficoJanela = new Chart(janela.querySelector('canvas'), {
+    type: 'line',
+    data: { datasets: [
+      { label: 'Velocidade (km/h)', data: obd.map(w => ({ x: w.ts - e.ts, y: w.data.speed })), borderColor: '#264653', yAxisID: 'y' },
+      { label: 'Aceleração X (g)', data: imu.map(w => ({ x: w.ts - e.ts, y: w.data.ax })), borderColor: '#F4A261', yAxisID: 'g' },
+    ] },
+    options: opcoes({ x: { type: 'linear', title: { display: true, text: 's em relação ao evento' } },
+                      y: { position: 'left' }, g: { position: 'right', grid: { drawOnChartArea: false } } }),
+  });
+}
+
+// ---------- mapa e telemetria ----------
+Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+Chart.defaults.color = '#4D4D4D';
+const mapa = L.map('mapa').setView([-25.4395, -49.2687], 14);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 19, attribution: '&copy; OpenStreetMap',
+}).addTo(mapa);
+const trilha = L.polyline([], { color: '#264653', weight: 4 }).addTo(mapa);
+const posicao = L.circleMarker([0, 0], { radius: 8, color: '#fff', weight: 2, fillColor: '#2A9D8F', fillOpacity: 1 });
+const marcas = L.layerGroup().addTo(mapa);
+let enquadrado = false;
+
+function renderMapa(tel, lista) {
+  const pontos = tel.filter(r => r.data.gps).map(r => [r.data.gps.lat, r.data.gps.lon]);
+  trilha.setLatLngs(pontos);
+  $('#mapa-vazio').classList.toggle('on', !pontos.length);
+  if (pontos.length) {
+    posicao.setLatLng(pontos.at(-1)).bindTooltip('Última posição').addTo(mapa);
+    if (!enquadrado) { mapa.fitBounds(trilha.getBounds(), { padding: [20, 20] }); enquadrado = true; }
+  }
+  marcas.clearLayers();
+  for (const e of lista) {
+    if (!e.data.gps) continue;
+    L.circleMarker([e.data.gps.lat, e.data.gps.lon], { radius: 7, color: '#fff', weight: 2, fillColor: COR[e.type], fillOpacity: 1 })
+      .bindTooltip(`${TIPO[e.type]} · ${hora(e.ts)}`).on('click', () => selecionar(e.id)).addTo(marcas);
+  }
+}
+
+function opcoes(escalas) {
+  return {
+    responsive: true, maintainAspectRatio: false, animation: false,
+    elements: { point: { radius: 0, hitRadius: 6 }, line: { borderWidth: 2 } },
+    interaction: { mode: 'nearest', axis: 'x', intersect: false },
+    plugins: { legend: { labels: { boxWidth: 12 } } },
+    scales: escalas,
+  };
+}
+
+const graficoTel = new Chart($('#tel'), {
+  type: 'line',
+  data: { datasets: [
+    { label: 'Velocidade OBD-II (km/h)', data: [], borderColor: '#264653', yAxisID: 'y' },
+    { label: 'Velocidade GPS (km/h)', data: [], borderColor: '#2A9D8F', borderDash: [5, 4], yAxisID: 'y' },
+    { label: 'Rotação (RPM)', data: [], borderColor: '#E9C46A', yAxisID: 'rpm' },
+  ] },
+  options: opcoes({
+    x: { type: 'linear', ticks: { callback: v => hora(v), maxTicksLimit: 6 } },
+    y: { position: 'left', title: { display: true, text: 'km/h' } },
+    rpm: { position: 'right', title: { display: true, text: 'RPM' }, grid: { drawOnChartArea: false } },
+  }),
+});
+graficoTel.options.plugins.tooltip = { callbacks: { title: i => i.length ? hora(i[0].parsed.x) : '' } };
+
+function renderTelemetria(tel) {
+  const serie = (fonte, campo) => tel.filter(r => r.data[fonte]?.[campo] != null).map(r => ({ x: r.ts, y: r.data[fonte][campo] }));
+  const [a, b, c] = graficoTel.data.datasets;
+  a.data = serie('obd', 'speed'); b.data = serie('gps', 'speed'); c.data = serie('obd', 'rpm');
+  graficoTel.update();
+  $('#tel-vazio').classList.toggle('on', !a.data.length && !b.data.length && !c.data.length);
+}
+
+// ---------- ciclo ----------
+async function atualizar() {
+  try {
+    const [saude, lista, tel] = await Promise.all([api('/health'), api('/events?limit=200'), api('/telemetry')]);
+    renderSaude(saude);
+    renderEventos(lista);
+    renderMapa(tel, lista);
+    renderTelemetria(tel);
+    if (!selecionado && lista.length) selecionar(lista[0].id);
+    $('#status').textContent = 'atualizado às ' + hora(Date.now() / 1000);
+    $('#status').classList.remove('erro');
+  } catch (err) {
+    $('#status').textContent = 'sem conexão com o servidor (' + err.message + ')';
+    $('#status').classList.add('erro');
+  }
+}
+
+atualizar();
+setInterval(atualizar, 10000);
+</script>
+</body>
+</html>
