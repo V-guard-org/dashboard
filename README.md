@@ -58,6 +58,20 @@ são tocados.
 | `VGUARD_DATA`   | `../integracao/dados`  | Pasta com `vguard.db` e `photos/`      |
 | `PORT`          | `8000`                 | Porta do servidor (só em `127.0.0.1`)  |
 
+Se aparecer `Address already in use`, já existe um servidor na porta: feche-o
+(Ctrl+C no terminal dele) ou use outra porta, por exemplo `PORT=8002 python3 dev_server.py`.
+
+## Testes
+
+```bash
+python3 test_dev_server.py
+```
+
+Gera os dados de demonstração numa pasta temporária, sobe o servidor numa
+porta livre e confere todas as rotas, inclusive os erros: evento inexistente,
+tentativa de ler outro arquivo pela URL, parâmetro inválido e banco ausente.
+Imprime `OK` no fim. Precisa do `integracao/` ao lado, como o `demo_data.py`.
+
 ## O que a página mostra
 
 | Bloco               | Fonte                    | Hoje                                         |
