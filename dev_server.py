@@ -126,8 +126,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 # O nome do arquivo vem do banco, nunca da URL.
                 if parts[3] == "photo" and found[0]["photo"]:
                     path = os.path.join(DATA, "photos", found[0]["photo"])
-                    with open(path, "rb") as f:
-                        return self.send(200, f.read(), "image/jpeg")
+                    try:
+                        with open(path, "rb") as f:
+                            return self.send(200, f.read(), "image/jpeg")
+                    except FileNotFoundError:
+                        # O banco aponta para a foto, mas o arquivo foi
+                        # apagado do cartão (ex.: à mão, por privacidade).
+                        return self.send(404, b"foto apagada do cartao", "text/plain")
 
             if parts == ["api", "telemetry"]:
                 rows = query(

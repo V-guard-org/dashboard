@@ -76,7 +76,8 @@ Imprime `OK` no fim. Precisa do `integracao/` ao lado, como o `demo_data.py`.
 
 | Bloco               | Fonte                    | Hoje                                         |
 |---------------------|--------------------------|----------------------------------------------|
-| Saúde (cartões)     | `GET /api/health`        | ✅ pendências e ocupação do cartão; ⏳ conexão, temperatura, 4G e última comunicação chegam com o backend |
+| Saúde (cartões)     | `GET /api/health`        | ✅ pendências e ocupação do cartão            |
+| Temperatura do motor | `obd.coolant` da telemetria | ⏳ vazia até o ESP32 ler o OBD-II pela CAN (o demo simula) |
 | Evento ↔ gráfico ↔ mapa | seleção na tabela ou no mapa | ✅ linha no instante do evento e mapa centralizado nele |
 | Lista de eventos    | `GET /api/events`        | ✅ eventos reais da câmera                    |
 | Detalhe e foto      | `GET /api/events/<id>`   | ✅ foto real; sensores vazios sem o ESP32     |

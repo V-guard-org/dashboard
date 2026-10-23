@@ -101,10 +101,7 @@
     <div class="card" id="c-fotos"><div class="rotulo">Fotos pendentes</div><div class="valor">—</div><div class="extra">só pelo Wi-Fi</div></div>
     <div class="card" id="c-telemetria"><div class="rotulo">Telemetria pendente</div><div class="valor">—</div><div class="extra"></div></div>
     <div class="card" id="c-sd"><div class="rotulo">Cartão SD</div><div class="valor">—</div><div class="extra"></div></div>
-    <div class="card" id="c-link"><div class="rotulo">Conexão</div><div class="valor">—</div><div class="extra"></div></div>
-    <div class="card" id="c-contato"><div class="rotulo">Última comunicação</div><div class="valor">—</div><div class="extra"></div></div>
-    <div class="card" id="c-temp"><div class="rotulo">Temperatura da Pi</div><div class="valor">—</div><div class="extra"></div></div>
-    <div class="card" id="c-4g"><div class="rotulo">Dados no 4G</div><div class="valor">—</div><div class="extra"></div></div>
+    <div class="card" id="c-motor"><div class="rotulo">Temperatura do motor</div><div class="valor">—</div><div class="extra"></div></div>
   </div>
 
   <div class="grade">
@@ -154,12 +151,9 @@ const num = (v, casas) => v.toLocaleString('pt-BR', { minimumFractionDigits: cas
 const TIPO = { fadiga: 'Fadiga', distracao: 'Distração' };
 const SINC = [['pendente', 'pend'], ['enviado', 'ok'], ['recusado', 'rec']];
 const COR = { fadiga: '#E76F51', distracao: '#F4A261' };
-const LINK = { wifi: 'Wi-Fi', cellular: '4G' };
-// O Sync fala com o servidor a cada 60 s quando há enlace; 5 min sem
-// notícias = dispositivo fora do ar ou sem cobertura.
-const OFFLINE_S = 300;
-// A Raspberry Pi 4 começa a reduzir o clock a 80 °C.
-const TEMP_ALERTA = 70, TEMP_CRITICA = 80;
+// Líquido de arrefecimento (OBD-II, lido pela rede CAN): ~90 °C é o normal
+// com o motor quente. Valores iniciais, a ajustar com o carro de teste.
+const MOTOR_ALERTA = 105, MOTOR_CRITICO = 115;
 const NOMES = { gps: 'GPS', imu: 'IMU', obd: 'OBD-II', lat: 'latitude', lon: 'longitude', speed: 'velocidade',
                 rpm: 'rotação', coolant: 'arrefecimento', ax: 'acel. X', ay: 'acel. Y', az: 'acel. Z' };
 
@@ -202,35 +196,15 @@ function renderSaude(h) {
   const usado = h.storage.used;
   card('c-sd', Math.round(usado * 100) + '%', num(h.storage.free_bytes / 1e9, 1) + ' GB livres',
        usado >= .95 ? 'critico' : usado >= .8 ? 'alerta' : '');
-
-  // Campos do POST /health que o Sync envia: só existem com o backend.
-  // Campo ausente = ainda sem backend; null = o dispositivo não tem o dado.
-  if (!('link' in h)) {
-    for (const id of ['c-link', 'c-contato', 'c-temp', 'c-4g']) card(id, '—', 'chega com o backend');
-    return;
-  }
-
-  const offline = !h.last_contact || Date.now() / 1000 - h.last_contact > OFFLINE_S;
-  if (offline) card('c-link', 'Sem conexão', h.link ? 'último enlace: ' + LINK[h.link] : '', 'alerta');
-  else card('c-link', LINK[h.link] || 'Sem conexão',
-            h.link === 'cellular' ? 'fotos aguardam o Wi-Fi' : 'envia tudo, inclusive as fotos');
-
-  card('c-contato', h.last_contact ? relativo(h.last_contact) : 'nunca',
-       h.last_contact ? dataHora(h.last_contact) : 'o dispositivo ainda não falou com o servidor');
-
-  const t = h.temperature;
-  if (t == null) card('c-temp', '—', 'sensor indisponível');
-  else card('c-temp', num(t, 1) + ' °C', t >= TEMP_CRITICA ? 'reduzindo o desempenho' : 'processador da Raspberry Pi',
-            t >= TEMP_CRITICA ? 'critico' : t >= TEMP_ALERTA ? 'alerta' : '');
-
-  card('c-4g', bytes(h.cellular_bytes), 'desde que a Pi ligou');
 }
 
-function bytes(n) {
-  if (n == null) return '—';
-  if (n < 1e6) return num(n / 1e3, 0) + ' kB';
-  if (n < 1e9) return num(n / 1e6, 1) + ' MB';
-  return num(n / 1e9, 2) + ' GB';
+// Temperatura do carro: última leitura do OBD-II que veio na telemetria.
+function renderMotor(tel) {
+  const ultima = tel.findLast(r => r.data.obd?.coolant != null);
+  if (!ultima) return card('c-motor', '—', 'sem dados do OBD-II (ESP32)');
+  const t = ultima.data.obd.coolant;
+  card('c-motor', num(t, 0) + ' °C', 'arrefecimento · ' + relativo(ultima.ts),
+       t >= MOTOR_CRITICO ? 'critico' : t >= MOTOR_ALERTA ? 'alerta' : '');
 }
 
 // ---------- eventos ----------
@@ -264,9 +238,12 @@ async function selecionar(id, centralizar = false) {
   if (selecionado !== id) return;
   if (centralizar && e.data.gps) mapa.flyTo([e.data.gps.lat, e.data.gps.lon], Math.max(mapa.getZoom(), 16), { duration: .6 });
 
-  const foto = e.has_photo
-    ? el('img', { class: 'foto', src: `/api/events/${id}/photo`, alt: 'Foto do motorista no momento do evento' })
-    : el('div', { class: 'foto' }, 'Evento sem foto');
+  let foto = el('div', { class: 'foto' }, 'Evento sem foto');
+  if (e.has_photo) {
+    const img = el('img', { class: 'foto', src: `/api/events/${id}/photo`, alt: 'Foto do motorista no momento do evento' });
+    img.onerror = () => img.replaceWith(el('div', { class: 'foto' }, 'Foto indisponível (apagada do cartão)'));
+    foto = img;
+  }
 
   const info = el('dl', {},
     el('dt', {}, 'Tipo'), el('dd', {}, TIPO[e.type] || e.type),
@@ -356,7 +333,7 @@ const posicao = L.circleMarker([0, 0], { radius: 8, color: '#fff', weight: 2, fi
 const marcas = L.layerGroup().addTo(mapa);
 let enquadrado = false;
 
-function renderMapa(tel, lista) {
+function renderMapa(tel) {
   const pontos = tel.filter(r => r.data.gps).map(r => [r.data.gps.lat, r.data.gps.lon]);
   trilha.setLatLngs(pontos);
   $('#mapa-vazio').classList.toggle('on', !pontos.length);
@@ -419,8 +396,9 @@ async function atualizar() {
     ultimaLista = lista;
     renderSaude(saude);
     renderEventos(lista);
-    renderMapa(tel, lista);
+    renderMapa(tel);
     renderTelemetria(tel);
+    renderMotor(tel);
     if (!selecionado && lista.length) selecionar(lista[0].id);
     $('#status').textContent = 'atualizado às ' + hora(Date.now() / 1000);
     $('#status').classList.remove('erro');

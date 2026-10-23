@@ -7,6 +7,7 @@ com outro dev_server.py aberto.
 """
 
 import json
+import os
 import tempfile
 import threading
 import urllib.error
@@ -82,6 +83,13 @@ def test_routes():
         assert len(telemetry) == 600
         assert [r["ts"] for r in telemetry] == sorted(r["ts"] for r in telemetry)
         assert all({"lat", "lon"} <= set(r["data"]["gps"]) for r in telemetry)
+
+        # Foto apagada do cartão, mas ainda no banco: 404, não 503.
+        with_photo = [e for e in events if e["has_photo"]]
+        if with_photo:
+            for name in os.listdir(os.path.join(demo_data.OUT, "photos")):
+                os.remove(os.path.join(demo_data.OUT, "photos", name))
+            assert get(base, "/api/events/%s/photo" % with_photo[0]["id"])[0] == 404
 
         # Erros: id inexistente, tentativa de ler outro arquivo, parâmetro ruim.
         assert get(base, "/api/events/nao-existe")[0] == 404
