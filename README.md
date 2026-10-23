@@ -74,10 +74,16 @@ Imprime `OK` no fim. Precisa do `integracao/` ao lado, como o `demo_data.py`.
 
 ## O que a página mostra
 
+O visual segue o painel do [OBD-II](https://github.com/V-guard-org/OBD-II) (`painel.h`):
+tema escuro, mostradores de ponteiro para rotação, velocidade e arrefecimento, e
+"Outros dados" com os PIDs que o `esp32_decoder.py` entrega (carga, pressão e
+temperatura da admissão, borboleta e tensão). Leitura com mais de 5 min, ou carro
+sem resposta, fica apagada. O arrefecimento fica vermelho a partir de 105 °C.
+
 | Bloco               | Fonte                    | Hoje                                         |
 |---------------------|--------------------------|----------------------------------------------|
 | Saúde (cartões)     | `GET /api/health`        | ✅ pendências e ocupação do cartão            |
-| Temperatura do motor | `obd.coolant` da telemetria | ⏳ vazia até o ESP32 ler o OBD-II pela CAN (o demo simula) |
+| Carro: mostradores e "Outros dados" | última linha `obd` da telemetria | ⏳ vazios até o ESP32 ler o OBD-II pela CAN (o demo simula) |
 | Evento ↔ gráfico ↔ mapa | seleção na tabela ou no mapa | ✅ linha no instante do evento e mapa centralizado nele |
 | Lista de eventos    | `GET /api/events`        | ✅ eventos reais da câmera                    |
 | Detalhe e foto      | `GET /api/events/<id>`   | ✅ foto real; sensores vazios sem o ESP32     |

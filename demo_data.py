@@ -58,7 +58,7 @@ def main():
         # Velocidade oscila entre ~20 e ~60 km/h; uma volta a cada 5 min.
         speed = 40 + 20 * math.sin(t / 45)
         angle = 2 * math.pi * t / 300
-        accel = math.cos(t / 45) * 20 / 45 / 3.6 / 9.81  # dv/dt em g
+        accel = math.cos(t / 45) * 20 / 45 / 3.6 / 9.81  # dv/dt em g (vira m/s² abaixo)
 
         # Instantes levemente diferentes, como nos sensores reais: o
         # EventManager só consolida amostras com ts maior que o da última
@@ -69,17 +69,26 @@ def main():
                 "lon": CENTER[1] + RADIUS * 1.4 * math.sin(angle) * math.cos(angle),
                 "speed": round(speed + 1.5, 1),
             }, ts + 0.002)
+            # Mesmos campos que o esp32_decoder.py do firmware_telemetria entrega.
+            throttle = round(max(0, 18 + 12 * math.cos(t / 45)), 1)
             manager.update("obd", {
                 "speed": round(speed),
                 "rpm": round(900 + speed * 45),
                 "coolant": round(min(90, 60 + t / 10)),
-                "age_ms": {"speed": 80, "rpm": 120, "coolant": 900},
+                "load": round(25 + throttle, 1),
+                "map": round(35 + throttle * 1.5),
+                "iat": 32,
+                "throttle": throttle,
+                "voltage": 13.8,
+                "age_ms": {"speed": 80, "rpm": 120, "coolant": 900, "load": 600,
+                           "map": 700, "iat": 950, "throttle": 500, "voltage": 1000},
             }, ts + 0.004)
 
+        # Em m/s², como o esp32_decoder.py entrega (az ≈ 9,81 = gravidade).
         manager.update("imu", {
-            "ax": round(accel + 0.02 * math.sin(t * 7), 3),
-            "ay": round(0.15 * math.sin(angle * 2), 3),
-            "az": round(1 + 0.03 * math.sin(t * 11), 3),
+            "ax": round(9.81 * (accel + 0.02 * math.sin(t * 7)), 2),
+            "ay": round(9.81 * 0.15 * math.sin(angle * 2), 2),
+            "az": round(9.81 * (1 + 0.03 * math.sin(t * 11)), 2),
         }, ts)
 
         if pending and t >= pending[0][0]:
