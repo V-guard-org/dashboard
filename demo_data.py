@@ -1,15 +1,18 @@
 """
 V-GUARD — Dados de demonstração para o dashboard.
 
-Simula 10 min de viagem perto da UTFPR (GPS, OBD-II e IMU) com 4 eventos
-e grava pelo EventManager de verdade (../integracao/events), em demo/.
-Serve para ver o mapa e os gráficos enquanto o GPS e o ESP32 não estão
-ligados ao vguard.py.
+Simula 10 min de viagem perto da UTFPR (GPS, OBD-II e IMU) com 4 eventos,
+grava pelo EventManager de verdade (../integracao/events), em demo/, e
+envia ao backend pelo Sync de verdade. Serve para ver o mapa e os gráficos
+enquanto o GPS e o ESP32 não estão ligados ao vguard.py.
 
-    python3 demo_data.py
-    VGUARD_DATA=demo python3 dev_server.py
+Cole antes as duas linhas `export` que o `python3 app.py novo-dispositivo demo`
+do backend mostrou (VGUARD_DEVICE e VGUARD_TOKEN), e rode:
+
+    VGUARD_BACKEND=http://localhost:8001/api python3 demo_data.py
 """
 
+import http.client
 import math
 import os
 import shutil
@@ -19,6 +22,7 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "integracao", "events"))
 from event_manager import EventManager
+import sync
 
 OUT = os.path.join(HERE, "demo")
 DURATION = 600          # s
@@ -95,8 +99,25 @@ def main():
             _, kind, score = pending.pop(0)
             manager.record_event(kind, score, photo(kind), ts)
 
-    manager.close()
-    print("demo gravada em", OUT)
+    # Um ciclo de envio, como o vguard.py faz a cada 60 s. O que não subir
+    # continua em demo/.
+    try:
+        reason = None
+        if sync.Sync(manager).sync_once() is None:
+            reason = "sem conexão com o backend (defina VGUARD_BACKEND)"
+    except sync.Retry as error:
+        reason = "o backend recusou (%s)" % error
+        if "401" in str(error):
+            reason += ": confira VGUARD_DEVICE e VGUARD_TOKEN"
+    except (OSError, http.client.HTTPException) as error:
+        reason = "backend fora do ar em %s (%s)" % (sync.BACKEND_URL, error)
+    finally:
+        pending = manager.pending_counts()
+        manager.close()
+
+    if reason:
+        sys.exit("demo gravada em demo/, mas não enviada: %s" % reason)
+    print("demo enviada ao backend; ainda no cartão:", pending)
 
 
 if __name__ == "__main__":

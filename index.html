@@ -85,9 +85,6 @@
   .tipo { display: inline-block; padding: 3px 9px; border-radius: 10px; font-size: 12px; font-weight: 600; }
   .tipo.fadiga { background: rgba(242, 139, 125, .14); color: var(--red); }
   .tipo.distracao { background: rgba(244, 190, 112, .14); color: var(--orange); }
-  .sinc { font-size: 12px; color: var(--muted); }
-  .sinc b { font-weight: 600; }
-  .sinc .ok { color: var(--green); } .sinc .pend { color: var(--orange); } .sinc .rec { color: var(--red); }
 
   .detalhe { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
   .foto { width: 100%; aspect-ratio: 4 / 3; background: var(--bg); border: 1px solid var(--line); border-radius: 14px; object-fit: cover;
@@ -178,7 +175,7 @@
       <div class="section-head"><h2>Eventos</h2><span>Fadiga e distração detectadas pela câmera</span></div>
       <div class="tabela">
         <table>
-          <thead><tr><th>Horário</th><th>Tipo</th><th>Score</th><th>Sincronização</th></tr></thead>
+          <thead><tr><th>Horário</th><th>Tipo</th><th>Score</th></tr></thead>
           <tbody id="eventos"></tbody>
         </table>
         <div class="nada" id="sem-eventos" hidden>Nenhum evento registrado ainda.</div>
@@ -223,10 +220,8 @@ const dataHora = ts => new Date(ts * 1000).toLocaleString('pt-BR');
 // Número com vírgula decimal: num(52.3, 1) → "52,3".
 const num = (v, casas) => v.toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas });
 const CSS = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
-const COR_TEMA = { green: CSS('--green'), cyan: CSS('--cyan'), orange: CSS('--orange'), red: CSS('--red'),
-                   muted: CSS('--muted'), line: CSS('--line'), text: CSS('--text'), bg: CSS('--bg') };
+const COR_TEMA = Object.fromEntries('green cyan orange red muted line text bg'.split(' ').map(n => [n, CSS('--' + n)]));
 const TIPO = { fadiga: 'Fadiga', distracao: 'Distração' };
-const SINC = [['pendente', 'pend'], ['enviado', 'ok'], ['recusado', 'rec']];
 const COR = { fadiga: COR_TEMA.red, distracao: COR_TEMA.orange };
 // Líquido de arrefecimento: ~90 °C é o normal com o motor quente.
 // Valores iniciais, a ajustar com o carro de teste.
@@ -260,13 +255,6 @@ function relativo(ts) {
   if (s < 3600) return `há ${Math.round(s / 60)} min`;
   if (s < 86400) return `há ${Math.round(s / 3600)} h`;
   return `há ${Math.round(s / 86400)} dias`;
-}
-
-function sinc(e) {
-  const [m, mc] = SINC[e.meta_synced], [f, fc] = SINC[e.photo_synced];
-  const span = el('span', { class: 'sinc' }, 'dados ', el('b', { class: mc }, m));
-  if (e.has_photo) span.append(' · foto ', el('b', { class: fc }, f));
-  return span;
 }
 
 // ---------- saúde ----------
@@ -362,8 +350,7 @@ function renderEventos(lista) {
     const tr = el('tr', { 'data-id': e.id },
       el('td', {}, dataHora(e.ts)),
       el('td', {}, el('span', { class: 'tipo ' + e.type }, TIPO[e.type] || e.type)),
-      el('td', {}, e.score == null ? '—' : num(e.score, 2)),
-      el('td', {}, sinc(e)));
+      el('td', {}, e.score == null ? '—' : num(e.score, 2)));
     if (e.id === selecionado) tr.classList.add('sel');
     tr.onclick = () => selecionar(e.id, true);
     return tr;
@@ -387,7 +374,7 @@ async function selecionar(id, centralizar = false) {
   let foto = el('div', { class: 'foto' }, 'Evento sem foto');
   if (e.has_photo) {
     const img = el('img', { class: 'foto', src: `${API}/events/${id}/photo`, alt: 'Foto do motorista no momento do evento' });
-    img.onerror = () => img.replaceWith(el('div', { class: 'foto' }, 'Foto indisponível (apagada do cartão)'));
+    img.onerror = () => img.replaceWith(el('div', { class: 'foto' }, 'Foto indisponível'));
     foto = img;
   }
 
@@ -395,12 +382,11 @@ async function selecionar(id, centralizar = false) {
     el('dt', {}, 'Tipo'), el('dd', {}, TIPO[e.type] || e.type),
     el('dt', {}, 'Horário'), el('dd', {}, dataHora(e.ts)),
     el('dt', {}, 'Score'), el('dd', {}, e.score == null ? '—' : num(e.score, 2)),
-    el('dt', {}, 'Envio'), el('dd', {}, sinc(e)),
     el('dt', {}, 'ID'), el('dd', {}, e.id));
 
   const sensores = el('div');
   const fontes = Object.entries(e.data);
-  if (!fontes.length) sensores.append(el('div', { class: 'sinc' }, 'Nenhum sensor conectado no momento do evento.'));
+  if (!fontes.length) sensores.append(el('div', { class: 'meta' }, 'Nenhum sensor conectado no momento do evento.'));
   for (const [fonte, valores] of fontes) {
     const dl = el('dl');
     for (const [k, v] of Object.entries(valores)) {

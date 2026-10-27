@@ -5,29 +5,18 @@ dados do carro, a trajetória no mapa, a telemetria e a saúde do dispositivo
 (RF25 a RF27, RF32). É uma página só (`index.html`), sem etapa de compilação.
 
 ```
-                          ┌─► backend (FastAPI + PostgreSQL) ──┐
-Raspberry Pi ── Sync ─────┘   V-guard-org/backend              │
-                                                               ├──/api/*──► index.html (navegador)
-cartão da Pi (vguard.db) ──(somente leitura)──► dev_server.py ─┘
+Raspberry Pi ── Sync ──► backend (FastAPI + PostgreSQL) ──/api/*──► index.html (navegador)
 ```
 
-A página fala só com as rotas `/api/*` descritas em [Rotas](#rotas-contrato-com-o-backend).
-Quem responde pode ser:
-
-- **o [backend](https://github.com/V-guard-org/backend):** o uso de verdade, com
-  login e com os dados que a Pi enviou pela internet;
-- **o `dev_server.py`, deste repositório:** para desenvolver e testar. Ele lê
-  direto o banco que o `vguard.py` grava no cartão
-  ([V-guard-org/integracao](https://github.com/V-guard-org/integracao)), sem login.
+A página fala só com as rotas `/api/*` descritas em [Rotas](#rotas-contrato-com-o-backend),
+servidas pelo [backend](https://github.com/V-guard-org/backend), com login.
 
 ## Arquivos
 
-| Arquivo              | O que é                                                          |
-|----------------------|------------------------------------------------------------------|
-| `index.html`         | A página inteira: HTML, CSS e JavaScript                         |
-| `dev_server.py`      | Servidor de desenvolvimento, só com a biblioteca padrão do Python |
-| `demo_data.py`       | Gera 10 min de viagem simulada em `demo/`                        |
-| `test_dev_server.py` | Testes das rotas do `dev_server.py`                              |
+| Arquivo        | O que é                                                         |
+|----------------|-----------------------------------------------------------------|
+| `index.html`   | A página inteira: HTML, CSS e JavaScript                        |
+| `demo_data.py` | Gera 10 min de viagem simulada em `demo/` e envia ao backend    |
 
 ## Abrir o dashboard
 
@@ -40,47 +29,44 @@ v-guard/
 └── dashboard/
 ```
 
-### Pelo backend (com login)
-
 ```bash
 cd ../backend && DASHBOARD_PASSWORD=escolha-uma-senha uvicorn app:app --host 0.0.0.0
 ```
 
 Abra <http://localhost:8000> e entre com o usuário `vguard` e a senha
 escolhida. O backend serve este `index.html`. Para os dados chegarem, o
-`vguard.py` precisa estar rodando e enviando: veja o README do backend.
-
-### Pelo `dev_server.py` (sem login, lendo o cartão)
-
-```bash
-python3 dev_server.py
-```
-
-Abra <http://localhost:8000>. Ele lê `../integracao/dados`, então mostra o
-que o `vguard.py` gravou, mesmo sem internet e sem backend.
+`vguard.py` precisa estar rodando com `VGUARD_BACKEND`, `VGUARD_DEVICE` e
+`VGUARD_TOKEN`: veja o README do backend.
 
 ### Com dados de demonstração
 
 Enquanto o GPS e o ESP32 não estão ligados, o mapa, os mostradores do carro
-e a telemetria ficam vazios com os dados reais. Para vê-los funcionando:
+e a telemetria ficam vazios com os dados reais. Para vê-los funcionando, suba
+um segundo backend com um banco só para a demonstração:
 
 ```bash
-python3 demo_data.py && VGUARD_DATA=demo python3 dev_server.py
+createdb vguard_demo
+cd ../backend && export DATABASE_URL=dbname=vguard_demo PHOTOS_DIR=fotos_demo
+python3 app.py novo-dispositivo demo
+DASHBOARD_PASSWORD=demo uvicorn app:app --port 8001
 ```
 
-O `demo_data.py` simula 10 min de viagem perto da UTFPR, com 4 eventos,
-GPS, IMU e todos os PIDs do OBD-II, e grava em `demo/` usando o
-`EventManager` de verdade. Os dados reais não são tocados.
+O `novo-dispositivo` mostra duas linhas `export VGUARD_DEVICE=...` e
+`export VGUARD_TOKEN=...`. Em outro terminal, dentro de `dashboard/`, cole
+essas duas linhas e rode:
 
-| Variável        | Padrão                 | Uso                                    |
-|-----------------|------------------------|----------------------------------------|
-| `VGUARD_DATA`   | `../integracao/dados`  | Pasta com `vguard.db` e `photos/`      |
-| `PORT`          | `8000`                 | Porta do servidor (só em `127.0.0.1`)  |
-| `VGUARD_EVENTS` | `../integracao/events` | Onde o `demo_data.py` acha o `EventManager` |
+```bash
+VGUARD_BACKEND=http://localhost:8001/api python3 demo_data.py
+```
 
-O backend e o `dev_server.py` usam a porta 8000. Se aparecer
-`Address already in use`, feche o outro (Ctrl+C no terminal dele) ou use
-outra porta, por exemplo `PORT=8001 python3 dev_server.py`.
+No fim ele diz se a demo foi enviada e, se não foi, o motivo: sem
+`VGUARD_BACKEND`, token recusado ou backend fora do ar.
+
+Abra <http://localhost:8001> (usuário `vguard`, senha `demo`). O `demo_data.py`
+simula 10 min de viagem perto da UTFPR, com 4 eventos, GPS, IMU e todos os
+PIDs do OBD-II, grava em `demo/` com o `EventManager` de verdade e envia uma
+vez pelo `Sync` de verdade. Os dados reais não são tocados. Rodar de novo
+envia outra viagem, com eventos novos.
 
 A página se atualiza sozinha a cada 10 s. Leaflet (mapa), Chart.js
 (gráficos) e a fonte Inter vêm de CDN, então o navegador precisa de internet.
@@ -95,7 +81,7 @@ os mesmos pontos de quebra para celular (3 mostradores lado a lado até 360 px).
 |---|---|
 | **Saúde** | Último evento, eventos, fotos e telemetria ainda no cartão da Pi, e ocupação do cartão |
 | **Carro** | Mostradores de rotação, velocidade e arrefecimento, e "Outros dados" com os demais PIDs (ver [campos](#campos-da-telemetria)) |
-| **Eventos** | Lista com horário, tipo, score e estado do envio (dados e foto) |
+| **Eventos** | Lista com horário, tipo e score |
 | **Detalhe do evento** | Foto, sensores no instante do evento e gráfico da janela de ±10 s |
 | **Trajetória** | Caminho do GPS, última posição e os eventos no mapa |
 | **Telemetria** | Velocidade do OBD-II e do GPS e rotação ao longo do tempo |
@@ -110,7 +96,7 @@ Comportamentos:
 - **Evento, gráfico e mapa ligados:** clicar num evento marca o instante dele no
   gráfico de telemetria e leva o mapa até o local; clicar num marcador do mapa
   seleciona o evento na tabela.
-- **Foto apagada do cartão:** aparece "Foto indisponível", em vez de imagem quebrada.
+- **Foto que não carrega:** aparece "Foto indisponível", em vez de imagem quebrada.
 - **Números com vírgula decimal**, como em português.
 
 | Bloco | Com os dados reais, hoje |
@@ -142,8 +128,7 @@ O backend implementa as mesmas rotas, protegidas por login.
 - O backend devolve também `link` (`"wifi"`, `"cellular"` ou `null`),
   `last_contact` (quando o servidor recebeu o último `POST /health`),
   `temperature` (°C da Raspberry Pi) e `cellular_bytes` (bytes no 4G desde que a
-  Pi ligou). O `dev_server.py` não tem esses campos, e **a página ainda não os
-  mostra** (ver [Pendências](#pendências)).
+  Pi ligou). **A página ainda não os mostra** (ver [Pendências](#pendências)).
 
 ### `GET /api/events?limit=200`
 
@@ -156,17 +141,13 @@ Do mais novo para o mais antigo:
   "ts": 1792784688.7,
   "score": 0.7,
   "data": {"gps": {...}, "imu": {...}, "obd": {...}},
-  "has_photo": true,
-  "meta_synced": 0,
-  "photo_synced": 0
+  "has_photo": true
 }]
 ```
 
 - `type`: `"fadiga"` ou `"distracao"`; tipos novos aparecem com o nome cru.
 - `data`: a última amostra de cada sensor no instante do evento. Pode vir `{}`.
-- `meta_synced` / `photo_synced`: `0` pendente, `1` enviado, `2` recusado.
-  No `dev_server.py` é o estado no cartão. No backend os dados sempre chegaram
-  (`1`), e a foto fica `0` enquanto espera o Wi-Fi.
+- `has_photo`: `false` também enquanto a foto espera o Wi-Fi na Pi.
 
 ### `GET /api/events/<id>`
 
@@ -179,8 +160,7 @@ frequência original dos sensores.
 
 ### `GET /api/events/<id>/photo`
 
-O JPEG da foto (`image/jpeg`), ou 404 se o evento não tiver foto ou se ela
-foi apagada do cartão.
+O JPEG da foto (`image/jpeg`), ou 404 se o evento não tiver foto.
 
 ### `GET /api/telemetry`
 
@@ -223,16 +203,8 @@ na janela do evento.
 
 ## Testes
 
-```bash
-python3 test_dev_server.py
-```
-
-Gera os dados de demonstração numa pasta temporária, sobe o servidor numa
-porta livre e confere todas as rotas, inclusive os erros: evento inexistente,
-tentativa de ler outro arquivo pela URL, parâmetro inválido, foto apagada do
-cartão e banco ausente. Imprime `OK` no fim. Precisa do `integracao/` ao lado.
-
-As rotas do backend têm os próprios testes, no repositório dele.
+As rotas têm os testes do backend (`test_app.py` e `test_e2e.py`, no
+repositório dele).
 
 ## Pendências
 
