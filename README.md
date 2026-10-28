@@ -79,7 +79,7 @@ os mesmos pontos de quebra para celular (3 mostradores lado a lado até 360 px).
 
 | Bloco | O que mostra |
 |---|---|
-| **Saúde** | Último evento, eventos, fotos e telemetria ainda no cartão da Pi, e ocupação do cartão |
+| **Saúde** | Último evento, eventos, fotos e telemetria ainda no cartão da Pi, ocupação do cartão, conexão (Wi-Fi ou 4G, último contato e dados no 4G) e temperatura da Pi |
 | **Carro** | Mostradores de rotação, velocidade e arrefecimento, e "Outros dados" com os demais PIDs (ver [campos](#campos-da-telemetria)) |
 | **Eventos** | Lista com horário, tipo e score |
 | **Detalhe do evento** | Foto, sensores no instante do evento e gráfico da janela de ±10 s |
@@ -97,13 +97,18 @@ Comportamentos:
   gráfico de telemetria e leva o mapa até o local; clicar num marcador do mapa
   seleciona o evento na tabela.
 - **Foto que não carrega:** aparece "Foto indisponível", em vez de imagem quebrada.
+  Foto que ainda espera o Wi-Fi aparece como "Foto no cartão da Pi, esperando o Wi-Fi".
+- **Conexão:** fica em alerta, como "Sem contato", se a Pi não fala há mais de 10 min
+  (o `Sync` espera até 10 min entre tentativas depois de falhas).
+- **Temperatura da Pi:** alerta a partir de 70 °C e crítico a partir de 80 °C, quando a
+  Pi 4 começa a reduzir o desempenho.
 - **Números com vírgula decimal**, como em português.
 
 | Bloco | Com os dados reais, hoje |
 |---|---|
 | Saúde, eventos, detalhe e foto | ✅ funcionam com o `vguard.py` e a webcam |
 | Carro, janela de ±10 s e telemetria | ⏳ vazios até o ESP32 enviar IMU e OBD-II (o demo simula) |
-| Trajetória | ⏳ vazia até existir o leitor do GPS (RF02) |
+| Trajetória | ⏳ vazia até o receptor GNSS ser ligado à Pi (o leitor já existe no `integracao/`) |
 
 ## Rotas (contrato com o backend)
 
@@ -128,7 +133,7 @@ O backend implementa as mesmas rotas, protegidas por login.
 - O backend devolve também `link` (`"wifi"`, `"cellular"` ou `null`),
   `last_contact` (quando o servidor recebeu o último `POST /health`),
   `temperature` (°C da Raspberry Pi) e `cellular_bytes` (bytes no 4G desde que a
-  Pi ligou). **A página ainda não os mostra** (ver [Pendências](#pendências)).
+  Pi ligou), mostrados nos cartões "Conexão" e "Temperatura da Pi".
 
 ### `GET /api/events?limit=200`
 
@@ -141,13 +146,16 @@ Do mais novo para o mais antigo:
   "ts": 1792784688.7,
   "score": 0.7,
   "data": {"gps": {...}, "imu": {...}, "obd": {...}},
-  "has_photo": true
+  "has_photo": true,
+  "photo_pending": false
 }]
 ```
 
 - `type`: `"fadiga"` ou `"distracao"`; tipos novos aparecem com o nome cru.
 - `data`: a última amostra de cada sensor no instante do evento. Pode vir `{}`.
-- `has_photo`: `false` também enquanto a foto espera o Wi-Fi na Pi.
+- `has_photo`: a foto já chegou ao servidor.
+- `photo_pending`: a foto existe, mas ainda está no cartão da Pi esperando o Wi-Fi.
+  Com os dois `false`, o evento não tem foto.
 
 ### `GET /api/events/<id>`
 
@@ -198,8 +206,7 @@ para ter nome e unidade, basta uma linha na constante `OBD` do `index.html`.
 **IMU:** `ax`, `ay`, `az` em m/s² e `gx`, `gy`, `gz` em °/s. A página usa `ax`
 na janela do evento.
 
-**GPS:** `lat`, `lon` e `speed` (km/h). **Esse formato ainda não existe no
-`integracao/`**: o leitor do GPS precisa gravar com esses nomes.
+**GPS:** `lat`, `lon` e `speed` (km/h), gravados pelo `GpsReader` do `integracao/`.
 
 ## Testes
 
@@ -208,13 +215,8 @@ repositório dele).
 
 ## Pendências
 
-- **Saúde completa (RF32):** mostrar enlace ativo, última comunicação,
-  temperatura da Raspberry Pi e dados no 4G. O backend já recebe e devolve
-  esses campos; falta exibir.
-- **GPS (RF02):** sem o leitor na Pi, o mapa fica vazio com os dados reais.
-- **Foto ainda no cartão:** o backend não sabe se um evento tem foto esperando
-  o Wi-Fi, então ela aparece como "sem foto" até chegar. Resolve com o
-  `EventManager` enviando `has_photo` junto com o evento.
+- **GPS (RF02):** o leitor existe na Pi; o mapa fica vazio até o receptor GNSS
+  ser ligado.
 - **Período da telemetria:** hoje vêm sempre as últimas ~3 h. Com viagens
   longas, vale escolher o dia ou o intervalo.
 - **Mais de um veículo:** as rotas ganham o dispositivo, por exemplo

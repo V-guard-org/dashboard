@@ -36,7 +36,7 @@
   h3 { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); font-weight: 500; margin: 18px 0 8px; }
 
   /* Cartões de saúde, no formato dos "Outros dados" do painel. */
-  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
   .card, .extra { border: 1px solid var(--line); border-radius: 14px; padding: 17px; min-width: 0; background: var(--card); }
   .rotulo, .extra .name { color: var(--muted); font-size: 12px; }
   .valor, .extra .value { font-size: 23px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; margin: 8px 0 4px; }
@@ -73,7 +73,10 @@
 
   .grade { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }
 
-  .tabela { max-height: 430px; overflow: auto; }
+  /* A seção dos eventos estica até a altura do detalhe ao lado: a tabela
+     ocupa esse espaço todo (base 0 = não aumenta a linha, só preenche). */
+  .grade > section:first-child { display: flex; flex-direction: column; }
+  .tabela { flex: 1 1 0; min-height: 430px; overflow: auto; }
   table { width: 100%; border-collapse: collapse; font-size: 14px; }
   th { text-align: left; font-weight: 500; color: var(--muted); font-size: 11px; letter-spacing: 1px; text-transform: uppercase;
        padding: 8px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--card); }
@@ -142,6 +145,8 @@
     <div class="card" id="c-fotos"><div class="rotulo">Fotos pendentes</div><div class="valor">—</div><div class="extra-txt">só pelo Wi-Fi</div></div>
     <div class="card" id="c-telemetria"><div class="rotulo">Telemetria pendente</div><div class="valor">—</div><div class="extra-txt"></div></div>
     <div class="card" id="c-sd"><div class="rotulo">Cartão SD</div><div class="valor">—</div><div class="extra-txt"></div></div>
+    <div class="card" id="c-enlace"><div class="rotulo">Conexão</div><div class="valor">—</div><div class="extra-txt"></div></div>
+    <div class="card" id="c-temp"><div class="rotulo">Temperatura da Pi</div><div class="valor">—</div><div class="extra-txt"></div></div>
   </div>
 
   <section aria-label="Dados do carro">
@@ -193,7 +198,7 @@
       <div class="section-head"><h2>Trajetória</h2><span>GPS</span></div>
       <div class="vazio-wrap">
         <div id="mapa"></div>
-        <div class="vazio" id="mapa-vazio">Sem posições de GPS.<br>O leitor do GPS ainda não está ligado ao vguard.py (RF02).</div>
+        <div class="vazio" id="mapa-vazio">Sem posições de GPS.<br>Elas chegam quando o receptor GNSS estiver ligado à Raspberry Pi.</div>
       </div>
     </section>
 
@@ -265,8 +270,26 @@ function card(id, valor, extra, nivel = '') {
   if (extra !== undefined) c.querySelector('.extra-txt').textContent = extra;
 }
 
+const ENLACE = { wifi: 'Wi-Fi', cellular: '4G' };
+
 function renderSaude(h) {
   card('c-evento', h.last_event ? relativo(h.last_event) : '—', h.last_event ? dataHora(h.last_event) : 'nenhum ainda');
+
+  // O Sync fala a cada 60 s; depois de falhas, espera até 10 min.
+  if (h.last_contact) {
+    const mudo = Date.now() / 1000 - h.last_contact > 600;
+    const franquia = h.cellular_bytes ? ' · 4G: ' + num(h.cellular_bytes / 1e6, 1) + ' MB desde que ligou' : '';
+    card('c-enlace', mudo ? 'Sem contato' : ENLACE[h.link] || 'Sem rede',
+         'último contato ' + relativo(h.last_contact) + franquia, mudo ? 'alerta' : '');
+  } else {
+    card('c-enlace', '—', 'aguardando o dispositivo');
+  }
+
+  // A Pi 4 reduz a velocidade a partir de 80 °C, e a visão perde quadros.
+  const t = h.temperature;
+  card('c-temp', t == null ? '—' : num(t, 1) + ' °C', t == null ? 'aguardando o dispositivo' : 'reduz o desempenho a partir de 80 °C',
+       t >= 80 ? 'critico' : t >= 70 ? 'alerta' : '');
+
   // No backend, pendências e cartão vêm do POST /health: null até o primeiro.
   const p = h.pending || {};
   card('c-eventos', p.events ?? '—', undefined, p.events ? 'alerta' : '');
@@ -371,7 +394,7 @@ async function selecionar(id, centralizar = false) {
   if (selecionado !== id) return;
   if (centralizar && e.data.gps) mapa.flyTo([e.data.gps.lat, e.data.gps.lon], Math.max(mapa.getZoom(), 16), { duration: .6 });
 
-  let foto = el('div', { class: 'foto' }, 'Evento sem foto');
+  let foto = el('div', { class: 'foto' }, e.photo_pending ? 'Foto no cartão da Pi, esperando o Wi-Fi' : 'Evento sem foto');
   if (e.has_photo) {
     const img = el('img', { class: 'foto', src: `${API}/events/${id}/photo`, alt: 'Foto do motorista no momento do evento' });
     img.onerror = () => img.replaceWith(el('div', { class: 'foto' }, 'Foto indisponível'));
