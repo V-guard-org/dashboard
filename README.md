@@ -97,7 +97,7 @@ Comportamentos:
   gráfico de telemetria e leva o mapa até o local; clicar num marcador do mapa
   seleciona o evento na tabela.
 - **Foto que não carrega:** aparece "Foto indisponível", em vez de imagem quebrada.
-  Foto que ainda espera o Wi-Fi aparece como "Foto no cartão da Pi, esperando o Wi-Fi".
+  Foto que ainda espera o envio aparece como "Foto no cartão da Pi, esperando o envio".
 - **Conexão:** fica em alerta, como "Sem contato", se a Pi não fala há mais de 10 min
   (o `Sync` espera até 10 min entre tentativas depois de falhas).
 - **Temperatura da Pi:** alerta a partir de 70 °C e crítico a partir de 80 °C, quando a
@@ -154,7 +154,7 @@ Do mais novo para o mais antigo:
 - `type`: `"fadiga"` ou `"distracao"`; tipos novos aparecem com o nome cru.
 - `data`: a última amostra de cada sensor no instante do evento. Pode vir `{}`.
 - `has_photo`: a foto já chegou ao servidor.
-- `photo_pending`: a foto existe, mas ainda está no cartão da Pi esperando o Wi-Fi.
+- `photo_pending`: a foto existe, mas ainda está no cartão da Pi esperando o envio.
   Com os dois `false`, o evento não tem foto.
 
 ### `GET /api/events/<id>`

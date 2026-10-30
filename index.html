@@ -142,7 +142,7 @@
   <div class="cards">
     <div class="card" id="c-evento"><div class="rotulo">Último evento</div><div class="valor">—</div><div class="extra-txt"></div></div>
     <div class="card" id="c-eventos"><div class="rotulo">Eventos pendentes</div><div class="valor">—</div><div class="extra-txt">metadados a enviar</div></div>
-    <div class="card" id="c-fotos"><div class="rotulo">Fotos pendentes</div><div class="valor">—</div><div class="extra-txt">só pelo Wi-Fi</div></div>
+    <div class="card" id="c-fotos"><div class="rotulo">Fotos pendentes</div><div class="valor">—</div><div class="extra-txt">a enviar</div></div>
     <div class="card" id="c-telemetria"><div class="rotulo">Telemetria pendente</div><div class="valor">—</div><div class="extra-txt"></div></div>
     <div class="card" id="c-sd"><div class="rotulo">Cartão SD</div><div class="valor">—</div><div class="extra-txt"></div></div>
     <div class="card" id="c-enlace"><div class="rotulo">Conexão</div><div class="valor">—</div><div class="extra-txt"></div></div>
@@ -397,7 +397,7 @@ async function selecionar(id, centralizar = false) {
   const local = posicaoGps(e.data.gps);
   if (centralizar && local) mapa.flyTo(local, Math.max(mapa.getZoom(), 16), { duration: .6 });
 
-  let foto = el('div', { class: 'foto' }, e.photo_pending ? 'Foto no cartão da Pi, esperando o Wi-Fi' : 'Evento sem foto');
+  let foto = el('div', { class: 'foto' }, e.photo_pending ? 'Foto no cartão da Pi, esperando o envio' : 'Evento sem foto');
   if (e.has_photo) {
     const img = el('img', { class: 'foto', src: `${API}/events/${id}/photo`, alt: 'Foto do motorista no momento do evento' });
     img.onerror = () => img.replaceWith(el('div', { class: 'foto' }, 'Foto indisponível'));
