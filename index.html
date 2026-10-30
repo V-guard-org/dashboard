@@ -270,6 +270,8 @@ function card(id, valor, extra, nivel = '') {
   if (extra !== undefined) c.querySelector('.extra-txt').textContent = extra;
 }
 
+// GPS sem fix chega como {} (gps_reader.py): só vale como posição se tiver lat/lon.
+const posicaoGps = g => g?.lat != null && g?.lon != null ? [g.lat, g.lon] : null;
 const ENLACE = { wifi: 'Wi-Fi', cellular: '4G' };
 
 function renderSaude(h) {
@@ -392,7 +394,8 @@ async function selecionar(id, centralizar = false) {
   marcarEventos();
   const e = await api('/events/' + id);
   if (selecionado !== id) return;
-  if (centralizar && e.data.gps) mapa.flyTo([e.data.gps.lat, e.data.gps.lon], Math.max(mapa.getZoom(), 16), { duration: .6 });
+  const local = posicaoGps(e.data.gps);
+  if (centralizar && local) mapa.flyTo(local, Math.max(mapa.getZoom(), 16), { duration: .6 });
 
   let foto = el('div', { class: 'foto' }, e.photo_pending ? 'Foto no cartão da Pi, esperando o Wi-Fi' : 'Evento sem foto');
   if (e.has_photo) {
@@ -494,7 +497,7 @@ const marcas = L.layerGroup().addTo(mapa);
 let enquadrado = false;
 
 function renderMapa(tel) {
-  const pontos = tel.filter(r => r.data.gps).map(r => [r.data.gps.lat, r.data.gps.lon]);
+  const pontos = tel.map(r => posicaoGps(r.data.gps)).filter(Boolean);
   trilha.setLatLngs(pontos);
   $('#mapa-vazio').classList.toggle('on', !pontos.length);
   if (pontos.length) {
@@ -507,9 +510,10 @@ function renderMapa(tel) {
 function desenharMarcas() {
   marcas.clearLayers();
   for (const e of ultimaLista) {
-    if (!e.data.gps) continue;
+    const local = posicaoGps(e.data.gps);
+    if (!local) continue;
     const sel = e.id === selecionado;
-    const m = L.circleMarker([e.data.gps.lat, e.data.gps.lon], {
+    const m = L.circleMarker(local, {
       radius: sel ? 11 : 7, color: sel ? COR_TEMA.text : COR_TEMA.bg, weight: sel ? 3 : 2, fillColor: COR[e.type], fillOpacity: 1,
     }).bindTooltip(`${TIPO[e.type]} · ${hora(e.ts)}`).on('click', () => selecionar(e.id)).addTo(marcas);
     if (sel) m.bringToFront();
