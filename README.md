@@ -71,7 +71,24 @@ envia outra viagem, com eventos novos.
 A página se atualiza sozinha a cada 10 s. Leaflet (mapa), Chart.js
 (gráficos) e a fonte Inter vêm de CDN, então o navegador precisa de internet.
 
+Para ver a tela da frota com vários carros, rode também o `frota_demo.py` do
+backend (veja o README dele).
+
 ## O que a página mostra
+
+São duas telas na mesma página, trocadas pelo endereço:
+
+| Endereço | Tela |
+|---|---|
+| `/` ou `/#/frota` | **Frota:** resumo (carros, em movimento, sem contato, alertas em 24 h), lista de carros e mapa com a última posição de cada um |
+| `/#/carro/<id>` | **Carro:** o painel de um dispositivo, descrito abaixo, com o link "← Todos os carros" |
+
+Na frota, cada carro aparece com a silhueta pintada na cor dele, a placa no
+padrão Mercosul, a situação ("Em movimento · 42 km/h", "Parado", "Sem contato
+há 2 h") e os alertas das últimas 24 h. O carro de verdade vem primeiro, com o
+selo "dados reais"; os outros, por número de alertas, com o selo "simulado".
+Clicar num carro ou num pino abre o painel dele. Carro sem GPS aparece na lista com "sem posição de GPS"
+e fica fora do mapa.
 
 O visual segue o painel do [OBD-II](https://github.com/V-guard-org/OBD-II)
 (`painel.h`): tema escuro, cartões arredondados, mostradores de ponteiro e
@@ -113,7 +130,27 @@ Comportamentos:
 ## Rotas (contrato com o backend)
 
 Todas devolvem JSON, exceto a foto. `ts` é sempre em segundos desde 1970 (Unix).
-O backend implementa as mesmas rotas, protegidas por login.
+O backend implementa as mesmas rotas, protegidas por login. Na tela de um
+carro, `/api/health`, `/api/events` e `/api/telemetry` levam `?device=<id>`.
+
+### `GET /api/devices`
+
+Um item por dispositivo, para a tela da frota:
+
+```json
+[{
+  "id": "sim-02", "model": "Onix", "plate": "RLV2C19", "color": "Prata", "simulated": true,
+  "last_contact": 1793573850.1, "link": "cellular",
+  "telemetry_ts": 1793573849.0, "lat": -25.447988, "lon": -49.28203, "speed": 23.0,
+  "events_24h": 5, "last_event": 1793571950.3
+}]
+```
+
+- `model`, `plate` e `color` vêm do `python3 app.py carro ...`. Dispositivo real sem
+  eles vem como Voyage branco, o carro de teste da equipe; sem placa, a página mostra o `id`.
+- `lat`, `lon` e `speed` são da última linha de telemetria. `lat` e `lon` vêm `null` se ela não tiver GPS com fix.
+- `color` é o nome da cor em português (Prata, Branco, Preto, Vermelho, Azul...);
+  a tonalidade de cada nome está na constante `CORES` do `index.html`.
 
 ### `GET /api/health`
 
@@ -219,5 +256,4 @@ repositório dele).
   ser ligado.
 - **Período da telemetria:** hoje vêm sempre as últimas ~3 h. Com viagens
   longas, vale escolher o dia ou o intervalo.
-- **Mais de um veículo:** as rotas ganham o dispositivo, por exemplo
-  `/api/devices/<id>/events`.
+- **Pinos da frota:** saltam para a nova posição a cada 10 s, sem animação.
