@@ -668,6 +668,15 @@ function situacao(d) {
 
 let mapaFrota = null, pinos = null, frotaEnquadrada = false;
 
+// Temperatura da Pi e uso do cartão SD, do último POST /health de cada carro.
+function saudePi(d) {
+  const partes = [];
+  // \u00a0: espaço que não quebra a linha no meio de "Pi 54 °C"
+  if (d.temperature != null) partes.push('Pi\u00a0' + num(d.temperature, 0) + '\u00a0°C');
+  if (d.storage_used != null) partes.push('cartão\u00a0' + Math.round(d.storage_used * 100) + '%\u00a0usado');
+  return partes.length ? ' · ' + partes.join(' · ') : '';
+}
+
 function renderFrota(lista) {
   const sits = lista.map(situacao);
   const conta = c => sits.filter(s => s[0] === c).length;
@@ -685,7 +694,7 @@ function renderFrota(lista) {
       el('div', {},
         el('div', { class: 'carro-nome' }, nomeCarro(d), selo(d)),
         placa(d),
-        el('div', { class: 'carro-sit' }, texto + (d.lat == null ? ' · sem posição de GPS' : ''))),
+        el('div', { class: 'carro-sit' }, texto + (d.lat == null ? ' · sem posição de GPS' : '') + saudePi(d))),
       el('div', { class: 'alertas' + (d.events_24h ? ' tem' : '') }, el('b', {}, d.events_24h), el('small', {}, 'alertas 24 h')));
   }));
   $('#sem-carros').hidden = lista.length > 0;

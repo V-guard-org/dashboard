@@ -72,7 +72,7 @@ A página se atualiza sozinha a cada 10 s. Leaflet (mapa), Chart.js
 (gráficos) e a fonte Inter vêm de CDN, então o navegador precisa de internet.
 
 Para ver a tela da frota com vários carros, rode também o `frota_demo.py` do
-backend (veja o README dele).
+`backend-main/` (veja o README dele; ainda não foi portado para o SQLite do `backend/`).
 
 ## O que a página mostra
 
