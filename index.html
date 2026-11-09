@@ -13,8 +13,8 @@
   /* Tema do painel do OBD-II (V-guard-org/OBD-II, painel.h). */
   :root {
     color-scheme: dark;
-    --bg: #101416; --card: #191f22; --line: #303a3e; --muted: #9ba9af; --text: #f2f6f5;
-    --green: #c0ef76; --cyan: #7bd8ea; --orange: #f4be70; --red: #f28b7d;
+    --bg: #0E0E0E; --card: #1C1C1C; --line: #303a3e; --muted: #9ba9af; --text: #f2f6f5;
+    --green: #CAFF00; --cyan: #7bd8ea; --orange: #f4be70; --red: #f28b7d;
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text); font: 15px Inter, system-ui, sans-serif; }
@@ -22,7 +22,8 @@
 
   header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
   .eyebrow { font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: var(--green); }
-  h1 { margin: 7px 0 0; font-size: 32px; font-weight: 600; letter-spacing: -1px; }
+  h1 { margin: 7px 0 0; font-size: 32px; font-weight: 600; letter-spacing: -1px; display: flex; align-items: center; gap: 12px; }
+  .logo { height: 30px; aspect-ratio: 705 / 119; }
   h1 span { color: var(--muted); font-size: 17px; letter-spacing: 0; font-weight: 400; }
   .badge { border: 1px solid var(--line); border-radius: 30px; padding: 9px 13px; font-size: 12px; color: var(--muted); white-space: nowrap; }
   .badge::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: currentColor; margin-right: 8px; }
@@ -152,7 +153,7 @@
   @media (max-width: 900px) { .grade, .frota { grid-template-columns: 1fr; } .lista { max-height: none; } #mapa-frota { height: 380px; } }
   @media (max-width: 700px) {
     main { padding: 22px 14px; }
-    h1 { font-size: 28px; } h1 span { display: block; margin-top: 3px; font-size: 13px; }
+    h1 { font-size: 28px; flex-direction: column; align-items: flex-start; gap: 4px; } .logo { height: 26px; } h1 span { font-size: 13px; }
     header { align-items: flex-start; }
     .gauges { gap: 9px; } .gauge { padding: 16px 9px; border-radius: 15px; }
     .number { font-size: clamp(20px, 7vw, 36px); letter-spacing: -1px; } .label { font-size: 10px; letter-spacing: 1px; } .age { font-size: 9px; margin-top: 15px; }
@@ -182,7 +183,7 @@
     <div>
       <a class="voltar" id="voltar" href="#/frota" hidden>← Todos os carros</a>
       <div class="eyebrow">Telemetria e monitoramento</div>
-      <h1>V-GUARD <span id="subtitulo">Frota</span></h1>
+      <h1><svg class="logo" viewBox="0 0 705 119" role="img" aria-label="V-GUARD"><path d="M106.063 118.89H67.1529C65.2229 118.88 63.6528 116.86 62.6628 115.14L0.712841 7.53C-0.197159 5.95 -0.197152 3.77999 0.492848 2.57999C1.29285 1.18999 3.41285 0 5.23285 0H42.7328C44.1628 0.01 45.9628 1.48999 47.0028 2.78999L109.603 111.14C110.453 112.61 110.453 114.79 110.033 115.94C109.643 117.02 107.643 118.89 106.063 118.89Z" fill="#CAFF00"/><path d="M136.743 67.37L99.6728 67.4C98.3428 67.4 96.5128 66.17 95.7428 65.36C94.7028 64.25 94.1328 61.59 95.0028 60.08L128.333 2.39C128.953 1.32 131.093 0 132.273 0L170.403 0.0399933C173.253 0.0399933 176.463 3.78 174.813 6.64L141.823 63.92C140.943 65.45 138.813 67.38 136.733 67.38L136.743 67.37Z" fill="#CAFF00"/><g fill="white"><path d="M269.373 29.53L286.523 29.55L257.243 89.59L236.783 89.64L207.503 29.5L224.993 29.43L247.113 77L269.373 29.53Z"/><path d="M318.333 68.1L284.283 68.11L284.123 56.01L318.303 55.97L318.333 68.1Z"/><path d="M383.073 67.08L360.023 66.97L359.903 55.71L398.193 55.66L397.783 67.26C396.523 77.31 389.723 85.24 380.033 88.25C368.573 91.82 356.183 91.92 345.003 87.91C332.113 83.29 325.413 71.81 325.773 58.57C326.123 45.55 333.083 34.82 345.853 30.75C363.793 25.03 392.423 27.42 396.873 47.34L381.063 49.89C378.153 40.17 364.953 39.42 355.193 41.51C346.253 43.43 341.473 51.1 341.683 59.89C341.853 67.12 344.923 73.29 351.813 76.26C358.843 79.3 366.853 79.35 374.163 77.05C378.263 75.02 381.723 72.84 383.053 67.07L383.073 67.08Z"/><path d="M457.053 29.49H472.713L472.473 67.26C472.413 77.3 465.643 85.37 456.253 88.35C445.673 91.71 434.343 91.65 423.733 88.6C413.343 85.62 406.743 76.75 406.553 66.03L406.513 29.54L422.153 29.46L422.263 65.35C422.283 71.27 426.593 76.09 432.193 77.29C437.453 78.41 443.073 78.37 448.093 76.9C453.553 75.3 456.703 70.76 457.013 65.28L457.053 29.48V29.49Z"/><path d="M531.883 77.82L495.893 77.79L490.333 89.55L473.613 89.44L503.753 29.55L524.073 29.45L554.493 89.5L537.813 89.65L531.883 77.83V77.82ZM525.883 65.96L513.883 41.23L501.983 65.89L525.883 65.97V65.96Z"/><path d="M628.503 89.46L610.343 89.74L595.023 68.78H575.963L575.953 89.6L560.323 89.58V29.44L602.433 29.53C606.403 29.53 610.403 30.3 614.033 31.24C622.253 33.75 626.293 40.77 626.403 49.09C626.513 58.05 621.523 65.38 611.733 67.23L628.503 89.47V89.46ZM602.623 57.08C607.943 57.06 610.713 53.1 610.463 48.83C610.213 44.56 607.123 41.64 602.363 41.63L575.963 41.56V57.19L602.623 57.09V57.08Z"/><path d="M702.913 49.84C706.973 65.52 701.553 82.22 685.433 87.3C680.483 88.64 675.543 89.54 670.343 89.54L635.673 89.56V29.42L673.093 29.53C678.493 29.55 683.663 30.92 688.493 32.86C695.753 36.24 700.883 42.05 702.903 49.84H702.913ZM686.123 69.29C688.593 63.14 688.883 56.97 686.763 51C684.523 45.92 679.473 42.43 673.633 42.35L651.313 42.04L651.293 76.94L672.293 76.72C677.933 76.66 683.013 74.02 686.123 69.29Z"/></g></svg> <span id="subtitulo">Frota</span></h1>
       <div class="ident" id="carro-id"></div>
     </div>
     <div class="badge" id="status" role="status" aria-live="polite">Carregando</div>
