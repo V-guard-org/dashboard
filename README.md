@@ -96,9 +96,9 @@ os mesmos pontos de quebra para celular (3 mostradores lado a lado até 360 px).
 
 | Bloco | O que mostra |
 |---|---|
-| **Saúde** | Último evento, eventos, fotos e telemetria ainda no cartão da Pi, ocupação do cartão, conexão (Wi-Fi ou 4G, último contato e dados no 4G) e temperatura da Pi |
+| **Saúde** | Último evento, eventos ainda no cartão da Pi, última linha de telemetria, ocupação do cartão, conexão (Wi-Fi ou 4G, último contato e dados no 4G) e temperatura da Pi |
 | **Carro** | Mostradores de rotação, velocidade e arrefecimento, e "Outros dados" com os demais PIDs (ver [campos](#campos-da-telemetria)) |
-| **Eventos** | Lista com horário, tipo e score |
+| **Eventos** | Lista com horário, tipo, local (GPS) e score |
 | **Detalhe do evento** | Foto, sensores no instante do evento e gráfico da janela de ±10 s |
 | **Trajetória** | Caminho do GPS, última posição e os eventos no mapa |
 | **Telemetria** | Velocidade do OBD-II e do GPS e rotação ao longo do tempo |
@@ -113,6 +113,11 @@ Comportamentos:
 - **Evento, gráfico e mapa ligados:** clicar num evento marca o instante dele no
   gráfico de telemetria e leva o mapa até o local; clicar num marcador do mapa
   seleciona o evento na tabela.
+- **Evento novo com a página aberta:** a linha pisca na tabela, e o detalhe e o mapa vão
+  até ele sozinhos. Isso para quando alguém escolhe um evento mais antigo e volta ao
+  clicar no mais recente. Se a foto chega depois do evento, o detalhe se refaz com ela.
+- **Lacunas:** com mais de 1 min sem telemetria (Pi desligada ou sem rede), a trilha do
+  mapa e o gráfico não ligam os dois lados. O mapa abre no trecho mais recente.
 - **Foto que não carrega:** aparece "Foto indisponível", em vez de imagem quebrada.
   Foto que ainda espera o envio aparece como "Foto no cartão da Pi, esperando o envio".
 - **Conexão:** fica em alerta, como "Sem contato", se a Pi não fala há mais de 10 min

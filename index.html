@@ -85,6 +85,10 @@
   tbody tr { cursor: pointer; }
   tbody tr:hover { background: #1f272a; }
   tbody tr.sel { background: #212b22; box-shadow: inset 3px 0 var(--green); }
+  /* Evento que acabou de chegar: a linha pisca por alguns segundos. */
+  @keyframes chegou { from { background: rgba(202, 255, 0, .28); } }
+  tbody tr.novo { animation: chegou 6s ease-out; }
+  td.local { color: var(--muted); font-size: 12px; white-space: nowrap; }
 
   .tipo { display: inline-block; padding: 3px 9px; border-radius: 10px; font-size: 12px; font-weight: 600; }
   .tipo.fadiga { background: rgba(242, 139, 125, .14); color: var(--red); }
@@ -215,7 +219,7 @@
   <div id="vista-carro" hidden>
   <div class="cards">
     <div class="card" id="c-evento"><div class="rotulo">Último evento</div><div class="valor">—</div><div class="extra-txt"></div></div>
-    <div class="card" id="c-eventos"><div class="rotulo">Eventos pendentes</div><div class="valor">—</div><div class="extra-txt">metadados a enviar</div></div>
+    <div class="card" id="c-eventos"><div class="rotulo">Eventos pendentes</div><div class="valor">—</div><div class="extra-txt">com a foto, ainda na Pi</div></div>
     <div class="card" id="c-fotos"><div class="rotulo">Fotos pendentes</div><div class="valor">—</div><div class="extra-txt">a enviar</div></div>
     <div class="card" id="c-telemetria"><div class="rotulo">Telemetria pendente</div><div class="valor">—</div><div class="extra-txt"></div></div>
     <div class="card" id="c-sd"><div class="rotulo">Cartão SD</div><div class="valor">—</div><div class="extra-txt"></div></div>
@@ -254,7 +258,7 @@
       <div class="section-head"><h2>Eventos</h2><span>Fadiga e distração detectadas pela câmera</span></div>
       <div class="tabela">
         <table>
-          <thead><tr><th>Horário</th><th>Tipo</th><th>Score</th></tr></thead>
+          <thead><tr><th>Horário</th><th>Tipo</th><th>Local (GPS)</th><th>Score</th></tr></thead>
           <tbody id="eventos"></tbody>
         </table>
         <div class="nada" id="sem-eventos" hidden>Nenhum evento registrado ainda.</div>
@@ -286,7 +290,7 @@
   </div>
   </div>
 
-  <footer>V-GUARD · Oficina de Integração 2 · UTFPR. Os dados do carro chegam pela sincronização (a cada 60 s com conexão), não ao vivo.</footer>
+  <footer>V-GUARD · Oficina de Integração 2 · UTFPR. A telemetria chega do carro a cada segundo, e o evento, 10 s depois da detecção. A página se atualiza a cada 10 s.</footer>
 </main>
 
 <script>
@@ -382,9 +386,14 @@ function renderSaude(h) {
   // No backend, pendências e cartão vêm do POST /health: null até o primeiro.
   const p = h.pending || {};
   card('c-eventos', p.events ?? '—', undefined, p.events ? 'alerta' : '');
-  card('c-fotos', p.photos ?? '—', undefined, p.photos ? 'alerta' : '');
-  card('c-telemetria', p.telemetry ?? '—',
-       h.last_telemetry ? 'última ' + relativo(h.last_telemetry) : 'sem leituras ainda');
+  // A Pi que envia por MQTT só informa os eventos pendentes: a foto conta junto com
+  // o evento, e a telemetria não espera na fila (uma linha perdida não é reenviada).
+  $('#c-fotos').hidden = p.photos == null;
+  if (p.photos != null) card('c-fotos', p.photos, undefined, p.photos ? 'alerta' : '');
+  const fila = p.telemetry != null;
+  $('#c-telemetria .rotulo').textContent = fila ? 'Telemetria pendente' : 'Telemetria';
+  card('c-telemetria', fila ? p.telemetry : h.last_telemetry ? relativo(h.last_telemetry) : '—',
+       !h.last_telemetry ? 'sem leituras ainda' : fila ? 'última ' + relativo(h.last_telemetry) : 'última linha às ' + hora(h.last_telemetry));
   if (!h.storage) return card('c-sd', '—', 'aguardando o dispositivo');
   const usado = h.storage.used;
   card('c-sd', Math.round(usado * 100) + '%', num(h.storage.free_bytes / 1e9, 1) + ' GB livres',
@@ -455,6 +464,14 @@ function renderCarro(tel) {
 
 // ---------- eventos ----------
 let selecionado = null;
+// seguindo: o detalhe acompanha o evento mais recente, até alguém escolher um mais antigo.
+let seguindo = true;
+// Eventos já vistos nesta página: os que chegam depois piscam na tabela (null = primeira carga).
+let conhecidos = null;
+// A foto que o detalhe mostra: se ela chegar depois do evento, o detalhe é refeito.
+let fotoNoDetalhe = null;
+
+const textoLocal = e => { const l = posicaoGps(e.data?.gps); return l ? num(l[0], 5) + ', ' + num(l[1], 5) : 'sem GPS'; };
 
 function renderEventos(lista) {
   const corpo = $('#eventos');
@@ -462,11 +479,14 @@ function renderEventos(lista) {
     const tr = el('tr', { 'data-id': e.id },
       el('td', {}, dataHora(e.ts)),
       el('td', {}, el('span', { class: 'tipo ' + e.type }, TIPO[e.type] || e.type)),
+      el('td', { class: 'local' }, textoLocal(e)),
       el('td', {}, e.score == null ? '—' : num(e.score, 2)));
     if (e.id === selecionado) tr.classList.add('sel');
-    tr.onclick = () => selecionar(e.id, true);
+    if (conhecidos && !conhecidos.has(e.id)) tr.classList.add('novo');
+    tr.onclick = () => { seguindo = e.id === lista[0].id; selecionar(e.id, true); };
     return tr;
   }));
+  conhecidos = new Set(lista.map(e => e.id));
   $('#sem-eventos').hidden = lista.length > 0;
 }
 
@@ -481,6 +501,7 @@ async function selecionar(id, centralizar = false) {
   marcarEventos();
   const e = await api('/events/' + id);
   if (selecionado !== id) return;
+  fotoNoDetalhe = e.has_photo;
   const local = posicaoGps(e.data.gps);
   if (centralizar && local) mapa.flyTo(local, Math.max(mapa.getZoom(), 16), { duration: .6 });
 
@@ -585,13 +606,28 @@ const posicao = L.circleMarker([0, 0], { radius: 8, color: COR_TEMA.bg, weight: 
 const marcas = L.layerGroup().addTo(mapa);
 let enquadrado = false;
 
+// Mais de 1 min sem linha de telemetria: a Pi esteve desligada ou sem rede.
+// A trilha e os gráficos não ligam os dois lados de uma lacuna dessas.
+const LACUNA_S = 60;
+
 function renderMapa(tel) {
-  const pontos = tel.map(r => posicaoGps(r.data.gps)).filter(Boolean);
-  trilha.setLatLngs(pontos);
-  $('#mapa-vazio').classList.toggle('on', !pontos.length);
-  if (pontos.length) {
-    posicao.setLatLng(pontos.at(-1)).bindTooltip('Última posição').addTo(mapa);
-    if (!enquadrado) { mapa.invalidateSize(); mapa.fitBounds(trilha.getBounds(), { padding: [20, 20] }); enquadrado = true; }
+  // Um trecho por período contínuo, para não riscar uma reta entre duas viagens.
+  const trechos = [];
+  let anterior = null;
+  for (const r of tel) {
+    const p = posicaoGps(r.data.gps);
+    if (!p) continue;
+    if (anterior == null || r.ts - anterior > LACUNA_S) trechos.push([]);
+    trechos.at(-1).push(p);
+    anterior = r.ts;
+  }
+  trilha.setLatLngs(trechos);
+  $('#mapa-vazio').classList.toggle('on', !trechos.length);
+  if (trechos.length) {
+    const atual = trechos.at(-1);
+    posicao.setLatLng(atual.at(-1)).bindTooltip('Última posição').addTo(mapa);
+    // Abre no trecho mais recente; os anteriores continuam no mapa.
+    if (!enquadrado) { mapa.invalidateSize(); mapa.fitBounds(L.latLngBounds(atual), { padding: [20, 20], maxZoom: 17 }); enquadrado = true; }
   }
   desenharMarcas();
 }
@@ -604,7 +640,8 @@ function desenharMarcas() {
     const sel = e.id === selecionado;
     const m = L.circleMarker(local, {
       radius: sel ? 11 : 7, color: sel ? COR_TEMA.text : COR_TEMA.bg, weight: sel ? 3 : 2, fillColor: COR[e.type], fillOpacity: 1,
-    }).bindTooltip(`${TIPO[e.type]} · ${hora(e.ts)}`).on('click', () => selecionar(e.id)).addTo(marcas);
+    }).bindTooltip(`${TIPO[e.type] || e.type} · ${hora(e.ts)}`)
+      .on('click', () => { seguindo = e.id === ultimaLista[0].id; selecionar(e.id); }).addTo(marcas);
     if (sel) m.bringToFront();
   }
 }
@@ -635,7 +672,18 @@ const graficoTel = new Chart($('#tel'), {
 graficoTel.options.plugins.tooltip = { callbacks: { title: i => i.length ? hora(i[0].parsed.x) : '' } };
 
 function renderTelemetria(tel) {
-  const serie = (fonte, campo) => tel.filter(r => r.data[fonte]?.[campo] != null).map(r => ({ x: r.ts, y: r.data[fonte][campo] }));
+  // Ponto sem valor no meio de cada lacuna: a linha do gráfico se interrompe ali.
+  const serie = (fonte, campo) => {
+    const pontos = [];
+    for (const r of tel) {
+      const y = r.data[fonte]?.[campo];
+      if (y == null) continue;
+      const ultimo = pontos.at(-1);
+      if (ultimo && r.ts - ultimo.x > LACUNA_S) pontos.push({ x: (ultimo.x + r.ts) / 2, y: null });
+      pontos.push({ x: r.ts, y });
+    }
+    return pontos;
+  };
   const [a, b, c] = graficoTel.data.datasets;
   a.data = serie('obd', 'speed'); b.data = serie('gps', 'speed'); c.data = serie('obd', 'rpm');
   marcarEventos();
@@ -745,7 +793,10 @@ async function atualizar() {
     renderEventos(lista);
     renderMapa(tel);
     renderTelemetria(tel);
-    if (!selecionado && lista.length) selecionar(lista[0].id);
+    const atual = lista.find(e => e.id === selecionado);
+    // Evento novo com o detalhe seguindo o mais recente: o mapa vai até ele.
+    if (lista.length && (!atual || (seguindo && lista[0].id !== selecionado))) selecionar(lista[0].id, !!atual);
+    else if (atual && atual.has_photo !== fotoNoDetalhe) selecionar(selecionado);
     emDia(true);
   } catch (err) { emDia(false, err); }
 }
